@@ -5,7 +5,7 @@ from utils import (
     take_screenshot,
     detect_quantity,
     find_current_price,
-    sell_item
+    sell_item, save_config
 )
 from gui import start_gui
 
@@ -101,15 +101,6 @@ def handle_sell_all():
     debug_print(f"\nPress '{current_sell_all_key}' to list the item...")
     debug_print("Press 'esc' to exit.")
     debug_print("______________________________________________")
-
-
-def handle_exit():
-    """
-    Handles the exit process when the hotkey is pressed.
-    """
-    debug_print("Exiting script.")
-    exit(0)
-
 
 def update_keybinds(new_sell_key, new_sell_all_key):
     global current_sell_key, current_sell_all_key

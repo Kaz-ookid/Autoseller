@@ -1,3 +1,5 @@
+import json
+
 import cv2
 import pytesseract
 import pyautogui
@@ -7,9 +9,14 @@ import os
 import time
 
 # Constants
-DEBUG_MODE = True
 TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
+DEBUG_MODE = True
+CONFIG_PATH = 'config.json'
+DEFAULT_CONFIG_PATH = 'default_config.json'
+
 THRESHOLD = 180
 WHITE = 255
 RES_PATH = 'res/'
@@ -20,9 +27,6 @@ QUANTITY_TEN = '10'
 QUANTITY_HUNDRED = '100'
 SELL_SEARCH_AREA = (1 / 6.5, 1 / 6, 4 / 6, 1 / 6)  # (left, top, right, bottom)
 OUI_BUTTON_SEARCH_AREA = (2 / 7, 1 / 2, 3 / 7, 1 / 4)  # (left, top, right, bottom)
-FAIL_SAFE_X = 1900
-FAIL_SAFE_Y = 10
-MOUSE_CHECK_INTERVAL = 0.1
 
 QUANTITY_CUES = {
     1: f'{RES_PATH}quantity_1_cue.png',
@@ -36,9 +40,6 @@ ALT_QUANTITY_CUES = {
     100: f'{RES_PATH}quantity_100_cue_prefilled.png'
 }
 
-# Set the path to the Tesseract executable
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-
 
 def debug_print(message):
     """Prints a debug message if debugging mode is enabled."""
@@ -50,6 +51,66 @@ def set_debug_mode(value):
     global DEBUG_MODE
     DEBUG_MODE = value
     debug_print(f"Debug mode set to {DEBUG_MODE}")
+
+
+def load_config():
+    """
+    Loads the configuration from a file, checks its integrity, and saves it if it's incomplete.
+
+    Returns:
+        dict: The loaded and possibly updated configuration.
+    """
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, 'r') as config_file:
+            config = json.load(config_file)
+    else:
+        with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
+            config = json.load(default_config_file)
+        save_config(config)
+
+    if not check_config_integrity(config):
+        save_config(config)
+
+    return config
+
+
+def check_config_integrity(config):
+    """
+    Checks if the config is complete and updates it with default values if necessary.
+
+    Args:
+        config (dict): The configuration to check.
+
+    Returns:
+        bool: True if the configuration was already complete, False if it was updated.
+    """
+    with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
+        default_config = json.load(default_config_file)
+
+    updated = False
+    for key in default_config:
+        if key not in config:
+            config[key] = default_config[key]
+            updated = True
+
+    return not updated
+
+
+def save_config(config):
+    """
+    Saves the configuration to a file.
+
+    Args:
+        config (dict): The configuration to save.
+    """
+    with open(CONFIG_PATH, 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+
+
+# Get and set functions for config
+def get_debug_mode():
+    config = load_config()
+    return config.get('DEBUG_MODE', True)
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
