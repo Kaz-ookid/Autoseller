@@ -5,16 +5,16 @@ import numpy as np
 import re
 import os
 import time
-import sys
 
 # Constants
 DEBUG_MODE = True
+TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
 THRESHOLD = 180
 WHITE = 255
 RES_PATH = 'res/'
 DEBUG_PATH = 'debug/'
 LOCATE_ELEMENT_THRESHOLD = 0.7
-CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
 QUANTITY_ONE = '1'
 QUANTITY_TEN = '10'
 QUANTITY_HUNDRED = '100'
@@ -36,11 +36,20 @@ ALT_QUANTITY_CUES = {
     100: f'{RES_PATH}quantity_100_cue_prefilled.png'
 }
 
+# Set the path to the Tesseract executable
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
 
 def debug_print(message):
     """Prints a debug message if debugging mode is enabled."""
     if DEBUG_MODE:
         print(message)
+
+
+def set_debug_mode(value):
+    global DEBUG_MODE
+    DEBUG_MODE = value
+    debug_print(f"Debug mode set to {DEBUG_MODE}")
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
@@ -249,8 +258,9 @@ def sell_item(screenshot, current_price, quick_sell=False):
     click_x = price_input_loc[0] + size[0] + 50
     click_y = price_input_loc[1] + size[1] // 2
 
-    price = str(current_price - 1)
-    if price <= '0':
+    price_value = current_price - 1
+    price = str(price_value)
+    if price_value <= 0:
         debug_print("Invalid price detected.")
         return
 
@@ -324,13 +334,3 @@ def find_current_price(screenshot, quantity):
         return None
 
     return current_price
-
-
-def fail_safe_shut_down():
-    """Monitors the mouse position and shuts down the program if the mouse is in the top right corner."""
-    while True:
-        x, y = pyautogui.position()
-        if x >= FAIL_SAFE_X and y <= FAIL_SAFE_Y:
-            debug_print("Mouse moved to top right corner. Shutting down...")
-            sys.exit()
-        time.sleep(MOUSE_CHECK_INTERVAL)
