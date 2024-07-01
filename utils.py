@@ -1,5 +1,4 @@
 import json
-
 import cv2
 import keyboard
 import pytesseract
@@ -8,13 +7,15 @@ import numpy as np
 import re
 import os
 import time
+import pygetwindow as gw
+from enum import Enum
 
 # Constants
 TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 CONFIG_PATH = 'config.json'
 DEFAULT_CONFIG_PATH = 'default_config.json'
 
@@ -49,9 +50,11 @@ current_sell_key = '*'
 current_sell_all_key = '$'
 registered_hotkeys = []
 
+DOFUS_FOCUSED = False
+
 
 def debug_print(message):
-    """Prints a debug message if debugging mode is enabled."""
+    # Prints a debug message if debugging mode is enabled.
     if DEBUG_MODE:
         print(message)
 
@@ -63,21 +66,16 @@ def set_debug_mode(value):
 
 
 def save_config_key(key, value):
-    """
-    Saves a single key-value pair to the configuration file.
-    """
+    # Saves a single key-value pair to the configuration file.
     config = load_config()
     config[key] = value
     save_config(config)
 
 
 def load_config():
-    """
-    Loads the configuration from a file, checks its integrity, and saves it if it's incomplete.
-
-    Returns:
-        dict: The loaded and possibly updated configuration.
-    """
+    # Loads the configuration from a file, checks its integrity, and saves it if it's incomplete.
+    # Returns:
+    # dict: The loaded and possibly updated configuration.
     config = {}
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, 'r') as config_file:
@@ -93,9 +91,7 @@ def load_config():
 
 
 def load_and_save_default_config():
-    """
-    Loads the default configuration from a file and saves it to the config file.
-    """
+    # Loads the default configuration from a file and saves it to the config file.
     with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
         config = json.load(default_config_file)
         save_config(config)
@@ -103,15 +99,12 @@ def load_and_save_default_config():
 
 
 def check_config_integrity(config):
-    """
-    Checks if the config is complete and updates it with default values if necessary.
-
-    Args:
-        config (dict): The configuration to check.
-
-    Returns:
-        bool: True if the configuration was already complete, False if it was updated.
-    """
+    # Checks if the config is complete and updates it with default values if necessary.
+    # Args:
+    # config (dict): The configuration to check.
+    #
+    # Returns:
+    # bool: True if the configuration was already complete, False if it was updated.
     with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
         default_config = json.load(default_config_file)
 
@@ -126,25 +119,19 @@ def check_config_integrity(config):
 
 
 def save_config(config):
-    """
-    Saves the configuration to a file.
-
-    Args:
-        config (dict): The configuration to save.
-    """
+    # Saves the configuration to a file.
+    # Args:
+    # config (dict): The configuration to save.
     with open(CONFIG_PATH, 'w') as config_file:
         json.dump(config, config_file, indent=4)
         debug_print("Config saved.")
 
 
 def update_keybinds(new_sell_key, new_sell_all_key):
-    """
-    Updates the key bindings for selling items.
-
-    Args:
-        new_sell_key (str): The new key for selling a single item.
-        new_sell_all_key (str): The new key for selling all items.
-    """
+    # Updates the key bindings for selling items.
+    # Args:
+    # new_sell_key (str): The new key for selling a single item.
+    # new_sell_all_key (str): The new key for selling all items.
     global current_sell_key, current_sell_all_key, registered_hotkeys
 
     # Unhook only if there are registered hotkeys
@@ -167,24 +154,39 @@ def update_keybinds(new_sell_key, new_sell_all_key):
     debug_print(f"Updated keybinds: Sell -> '{current_sell_key}', Sell All -> '{current_sell_all_key}'")
 
 
+def unhook_hotkeys():
+    # Unhook all registered hotkeys.
+    global registered_hotkeys
+    if registered_hotkeys:
+        for hotkey in registered_hotkeys:
+            keyboard.remove_hotkey(hotkey)
+        registered_hotkeys = []
+
+
+def hook_hotkeys():
+    # Re-hook the hotkeys.
+    global current_sell_key, current_sell_all_key, registered_hotkeys
+    registered_hotkeys = [
+        keyboard.add_hotkey(current_sell_key, handle_sell),
+        keyboard.add_hotkey(current_sell_all_key, handle_sell_all)
+    ]
+
+
 def get_debug_mode():
     config = load_config()
     return config.get(DEBUG_MODE_KEY, True)
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
-    """
-    Locate the template image within a larger image.
-
-    Args:
-        template_path (str): Path to the template image.
-        image (np.ndarray): The image in which to search.
-        threshold (float): The threshold for template matching.
-        global_search_area (tuple): The search area as a fraction of the image dimensions.
-
-    Returns:
-        tuple: The top-left corner and size of the detected template, or (None, None) if not found.
-    """
+    # Locate the template image within a larger image.
+    # Args:
+    # template_path (str): Path to the template image.
+    # image (np.ndarray): The image in which to search.
+    # threshold (float): The threshold for template matching.
+    # global_search_area (tuple): The search area as a fraction of the image dimensions.
+    #
+    # Returns:
+    # tuple: The top-left corner and size of the detected template, or (None, None) if not found.
     if not os.path.exists(template_path):
         debug_print(f"Template image not found: {template_path}")
         return None, None
@@ -219,32 +221,30 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
 
 
 def take_screenshot():
-    """
-    Takes a screenshot of the current screen.
-
-    Returns:
-        np.ndarray: The screenshot image.
-    """
+    # Takes a screenshot of the current screen.
+    #
+    # Returns:
+    # np.ndarray: The screenshot image.
     screenshot = pyautogui.screenshot()
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
 
 def extract_table(roi):
-    """
-    Extracts a table of numbers from a region of interest (ROI) in an image.
-
-    Args:
-        roi (np.ndarray): The region of interest image.
-
-    Returns:
-        dict: A dictionary mapping quantities to prices.
-    """
+    # Extracts a table of numbers from a region of interest (ROI) in an image.
+    #
+    # Args:
+    # roi (np.ndarray): The region of interest image.
+    #
+    # Returns:
+    # dict: A dictionary mapping quantities to prices.
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
     if DEBUG_MODE:
         cv2.imwrite(f'{RES_PATH}gray.png', gray)
 
-    _, thresh = cv2.threshold(gray, THRESHOLD, WHITE, cv2.THRESH_BINARY_INV)
+    # Adjust the threshold value slightly to improve precision
+    adjusted_threshold = 160
+    _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
     if DEBUG_MODE:
         cv2.imwrite(f'{RES_PATH}thresholded.png', thresh)
@@ -269,15 +269,13 @@ def extract_table(roi):
 
 
 def detect_prices(screenshot):
-    """
-    Detects the price table in the screenshot.
-
-    Args:
-        screenshot (np.ndarray): The screenshot image.
-
-    Returns:
-        dict: A dictionary mapping quantities to prices.
-    """
+    # Detects the price table in the screenshot.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
+    #
+    # Returns:
+    # dict: A dictionary mapping quantities to prices.
     price_table_header_cue_path = f'{RES_PATH}price_table_cue.png'
     price_table_header_cue_dim = cv2.imread(price_table_header_cue_path, 0).shape
 
@@ -324,15 +322,13 @@ def detect_prices(screenshot):
 
 
 def detect_quantity(screenshot):
-    """
-    Detects the quantity selected in the screenshot.
-
-    Args:
-        screenshot (np.ndarray): The screenshot image.
-
-    Returns:
-        int: The detected quantity, or None if not found.
-    """
+    # Detects the quantity selected in the screenshot.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
+    #
+    # Returns:
+    # int: The detected quantity, or None if not found.
 
     for quantity, cue_path in QUANTITY_CUES.items():
         loc, _ = locate_element(cue_path, screenshot, 0.98)
@@ -351,14 +347,12 @@ def detect_quantity(screenshot):
 
 
 def sell_item(screenshot, current_price, quick_sell=False):
-    """
-    Automates the process of selling an item.
-
-    Args:
-        screenshot (np.ndarray): The screenshot image.
-        current_price (int): The price to list the item at.
-        quick_sell (bool): Whether to skip the price input field and list the item at the current price.
-    """
+    # Automates the process of selling an item.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
+    # current_price (int): The price to list the item at.
+    # quick_sell (bool): Whether to skip the price input field and list the item at the current price.
 
     if quick_sell:
         debug_print("Quick sell for price : " + str(current_price))
@@ -429,16 +423,14 @@ def click_sell(screenshot, price='0'):
 
 
 def find_current_price(screenshot, quantity):
-    """
-    Finds the current price of the item for the given quantity.
-
-    Args:
-        screenshot (np.ndarray): The screenshot image.
-        quantity (int): The quantity of the item.
-
-    Returns:
-        int: The current price of the item, or None if not found.
-    """
+    # Finds the current price of the item for the given quantity.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
+    # quantity (int): The quantity of the item.
+    #
+    # Returns:
+    # int: The current price of the item, or None if not found.
     if quantity is None:
         debug_print("Invalid quantity detected.")
         return None
@@ -456,21 +448,40 @@ def find_current_price(screenshot, quantity):
     return current_price
 
 
+class ProcessType(Enum):
+    SINGLE = "single"
+    ALL = "all"
+
+
 def handle_sell():
-    """
-    Handles the sell process when the hotkey is pressed.
-    """
-    debug_print(f"\n________________ Selling item with key {current_sell_key} ________________")
+    # Handles the sell process when the hotkey is pressed.
+    execute_sell_process(single_sell_process, ProcessType.SINGLE)
+
+
+def handle_sell_all():
+    # Handles the sell process when the hotkey is pressed.
+    execute_sell_process(sell_all_process, ProcessType.ALL)
+
+
+def execute_sell_process(process_function, process_type):
+    # Executes the sell process.
+    #
+    # Args:
+    # process_function (function): The function to execute the unique part of the sell process.
+    # process_type (ProcessType): The type of sell process.
+    refresh_focus_status()
+    if not DOFUS_FOCUSED:
+        debug_print(f"Dofus window is not focused. Aborting {process_type.value} sell action.")
+        return
+
+    debug_print(f"\n________________ Selling item with {process_type.value} key ________________")
     debug_print("Key pressed, processing...")
 
     saved_mouse_pos = pyautogui.position()
     pyautogui.moveTo(1, 1)
 
     screenshot = take_screenshot()
-
-    quantity = detect_quantity(screenshot)
-    current_price = find_current_price(screenshot, quantity)
-    sell_item(screenshot, current_price)
+    process_function(screenshot)
 
     pyautogui.moveTo(saved_mouse_pos)
 
@@ -479,18 +490,21 @@ def handle_sell():
     debug_print("______________________________________________")
 
 
-def handle_sell_all():
-    """
-    Handles the sell process when the hotkey is pressed.
-    """
-    debug_print(f"\n________________ Selling item with key {current_sell_all_key} ________________")
-    debug_print("Key pressed, processing...")
+def single_sell_process(screenshot):
+    # Executes the unique part of the single sell process.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
+    quantity = detect_quantity(screenshot)
+    current_price = find_current_price(screenshot, quantity)
+    sell_item(screenshot, current_price)
 
-    saved_mouse_pos = pyautogui.position()
-    pyautogui.moveTo(1, 1)
 
-    screenshot = take_screenshot()
-
+def sell_all_process(screenshot):
+    # Executes the unique part of the sell all process.
+    #
+    # Args:
+    # screenshot (np.ndarray): The screenshot image.
     quantity = detect_quantity(screenshot)
     quantity_has_changed = True
 
@@ -517,12 +531,26 @@ def handle_sell_all():
         else:
             quantity_has_changed = False
 
-    pyautogui.moveTo(saved_mouse_pos)
 
-    debug_print(f"\nPress '{current_sell_all_key}' to list the item...")
-    debug_print("Press 'esc' to exit.")
-    debug_print("______________________________________________")
+def refresh_focus_status():
+    global DOFUS_FOCUSED
+    DOFUS_FOCUSED = is_game_window_open_and_focused()
+
+
+def is_game_window_open_and_focused():
+    game_windows = [w for w in gw.getWindowsWithTitle('- Dofus') if w.visible]
+    focused_window = gw.getActiveWindow()
+    if focused_window and any(focused_window.title == w.title for w in game_windows):
+        debug_print(f"Game window {focused_window.title} is focused.")
+        return True
+    debug_print("Game window is either not open or not focused.")
+    return False
 
 
 def setup_hotkeys(hotkeys_map):
     update_keybinds(hotkeys_map[SELL_KEY_KEY].get(), hotkeys_map[SELL_ALL_KEY_KEY].get())
+
+
+def check_game_window_focus(root):
+    refresh_focus_status()
+    root.after(15000, check_game_window_focus, root)

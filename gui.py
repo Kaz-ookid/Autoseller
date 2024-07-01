@@ -1,14 +1,17 @@
 import tkinter as tk
-from tkinter import messagebox
+from enum import Enum
 from utils import set_debug_mode, debug_print, save_config_key, load_config, \
-    DEBUG_MODE_KEY, SELL_KEY_KEY, SELL_ALL_KEY_KEY, update_keybinds, setup_hotkeys
+    DEBUG_MODE_KEY, SELL_KEY_KEY, SELL_ALL_KEY_KEY, update_keybinds, setup_hotkeys, refresh_focus_status, \
+    check_game_window_focus
+import uuid
 
+class MessageType(Enum):
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
 
 def start_gui():
-    """
-    Starts the GUI.
-    """
-
+    # Starts the GUI.
     def on_exit():
         debug_print("Exiting script.")
         root.destroy()
@@ -16,24 +19,45 @@ def start_gui():
     def update_keybinds_wrapper():
         sell_key = sell_key_entry.get()
         sell_all_key = sell_all_key_entry.get()
-        if sell_key and sell_all_key:
+
+        if sell_key == config.get(SELL_KEY_KEY) and sell_all_key == config.get(SELL_ALL_KEY_KEY):
+            send_info_message("Keybinds have not changed.", MessageType.WARNING)
+        elif sell_key and sell_all_key and sell_all_key != sell_key:
             update_keybinds(sell_key, sell_all_key)
             save_config_key(SELL_KEY_KEY, sell_key)
             save_config_key(SELL_ALL_KEY_KEY, sell_all_key)
+            send_info_message("Keybinds updated successfully.", MessageType.SUCCESS)
         else:
-            messagebox.showwarning("Invalid Input", "Please enter valid keybinds.")
+            send_info_message("Invalid Input: Please enter valid keybinds.", MessageType.WARNING)
+
+    def send_info_message(message, message_type):
+        colors = {
+            MessageType.SUCCESS: "green",
+            MessageType.WARNING: "orange",
+            MessageType.ERROR: "red"
+        }
+        message_id = str(uuid.uuid4())
+        current_message.set(message_id)
+        info_message.config(text=message, fg=colors.get(message_type, "black"))
+        root.after(2000, clear_info_message, message_id)
+
+    def clear_info_message(message_id):
+        if current_message.get() == message_id:
+            info_message.config(text="")
 
     def toggle_debug_mode():
         set_debug_mode(debug_var.get())
         save_config_key(DEBUG_MODE_KEY, debug_var.get())
 
-    # Load configuration
+    # Load configuration once
     config = load_config()
 
     root = tk.Tk()
     root.title("Dofus AutoSeller")
     root.geometry("300x200")
     root.protocol("WM_DELETE_WINDOW", on_exit)
+
+    current_message = tk.StringVar(value="")
 
     # Checkboxes
     debug_var = tk.BooleanVar(value=config.get(DEBUG_MODE_KEY, True))
@@ -50,7 +74,10 @@ def start_gui():
     sell_all_key_entry.insert(0, config.get(SELL_ALL_KEY_KEY, '$'))
     sell_all_key_entry.pack(anchor="w")
 
-    tk.Button(root, text="Update Keybinds", command=update_keybinds_wrapper).pack(anchor="w")
+    tk.Button(root, text="Save", command=update_keybinds_wrapper).pack(anchor="w")
+
+    info_message = tk.Label(root, fg="green", text="")
+    info_message.pack(anchor="w")
 
     hotkeys_map = {
         SELL_KEY_KEY: sell_key_entry,
@@ -58,6 +85,8 @@ def start_gui():
     }
 
     setup_hotkeys(hotkeys_map)
+    set_debug_mode(debug_var.get())
 
-    # Start the GUI event loop
+    check_game_window_focus(root)
+
     root.mainloop()
