@@ -1,6 +1,7 @@
 import json
 
 import cv2
+import keyboard
 import pytesseract
 import pyautogui
 import numpy as np
@@ -28,6 +29,10 @@ QUANTITY_HUNDRED = '100'
 SELL_SEARCH_AREA = (1 / 6.5, 1 / 6, 4 / 6, 1 / 6)  # (left, top, right, bottom)
 OUI_BUTTON_SEARCH_AREA = (2 / 7, 1 / 2, 3 / 7, 1 / 4)  # (left, top, right, bottom)
 
+DEBUG_MODE_KEY = 'DEBUG_MODE'
+SELL_KEY_KEY = 'SELL_KEY'
+SELL_ALL_KEY_KEY = 'SELL_ALL_KEY'
+
 QUANTITY_CUES = {
     1: f'{RES_PATH}quantity_1_cue.png',
     10: f'{RES_PATH}quantity_10_cue.png',
@@ -39,6 +44,10 @@ ALT_QUANTITY_CUES = {
     10: f'{RES_PATH}quantity_10_cue_prefilled.png',
     100: f'{RES_PATH}quantity_100_cue_prefilled.png'
 }
+
+current_sell_key = '*'
+current_sell_all_key = '$'
+registered_hotkeys = []
 
 
 def debug_print(message):
@@ -53,6 +62,15 @@ def set_debug_mode(value):
     debug_print(f"Debug mode set to {DEBUG_MODE}")
 
 
+def save_config_key(key, value):
+    """
+    Saves a single key-value pair to the configuration file.
+    """
+    config = load_config()
+    config[key] = value
+    save_config(config)
+
+
 def load_config():
     """
     Loads the configuration from a file, checks its integrity, and saves it if it's incomplete.
@@ -60,18 +78,28 @@ def load_config():
     Returns:
         dict: The loaded and possibly updated configuration.
     """
+    config = {}
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, 'r') as config_file:
             config = json.load(config_file)
+            debug_print("Config loaded.")
     else:
-        with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
-            config = json.load(default_config_file)
-        save_config(config)
+        load_and_save_default_config()
 
     if not check_config_integrity(config):
-        save_config(config)
+        load_and_save_default_config()
 
     return config
+
+
+def load_and_save_default_config():
+    """
+    Loads the default configuration from a file and saves it to the config file.
+    """
+    with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
+        config = json.load(default_config_file)
+        save_config(config)
+        debug_print("Default config loaded and saved.")
 
 
 def check_config_integrity(config):
@@ -92,6 +120,7 @@ def check_config_integrity(config):
         if key not in config:
             config[key] = default_config[key]
             updated = True
+            debug_print("Config incomplete")
 
     return not updated
 
@@ -105,12 +134,42 @@ def save_config(config):
     """
     with open(CONFIG_PATH, 'w') as config_file:
         json.dump(config, config_file, indent=4)
+        debug_print("Config saved.")
 
 
-# Get and set functions for config
+def update_keybinds(new_sell_key, new_sell_all_key):
+    """
+    Updates the key bindings for selling items.
+
+    Args:
+        new_sell_key (str): The new key for selling a single item.
+        new_sell_all_key (str): The new key for selling all items.
+    """
+    global current_sell_key, current_sell_all_key, registered_hotkeys
+
+    # Unhook only if there are registered hotkeys
+    if registered_hotkeys:
+        for hotkey in registered_hotkeys:
+            keyboard.remove_hotkey(hotkey)
+
+    current_sell_key = new_sell_key
+    current_sell_all_key = new_sell_all_key
+
+    # Add the new hotkeys and store their references
+    registered_hotkeys = [
+        keyboard.add_hotkey(current_sell_key, handle_sell),
+        keyboard.add_hotkey(current_sell_all_key, handle_sell_all)
+    ]
+
+    save_config_key(SELL_KEY_KEY, current_sell_key)
+    save_config_key(SELL_ALL_KEY_KEY, current_sell_all_key)
+
+    debug_print(f"Updated keybinds: Sell -> '{current_sell_key}', Sell All -> '{current_sell_all_key}'")
+
+
 def get_debug_mode():
     config = load_config()
-    return config.get('DEBUG_MODE', True)
+    return config.get(DEBUG_MODE_KEY, True)
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
@@ -395,3 +454,75 @@ def find_current_price(screenshot, quantity):
         return None
 
     return current_price
+
+
+def handle_sell():
+    """
+    Handles the sell process when the hotkey is pressed.
+    """
+    debug_print(f"\n________________ Selling item with key {current_sell_key} ________________")
+    debug_print("Key pressed, processing...")
+
+    saved_mouse_pos = pyautogui.position()
+    pyautogui.moveTo(1, 1)
+
+    screenshot = take_screenshot()
+
+    quantity = detect_quantity(screenshot)
+    current_price = find_current_price(screenshot, quantity)
+    sell_item(screenshot, current_price)
+
+    pyautogui.moveTo(saved_mouse_pos)
+
+    debug_print(f"\nPress '{current_sell_key}' to list the item...")
+    debug_print("Press 'esc' to exit.")
+    debug_print("______________________________________________")
+
+
+def handle_sell_all():
+    """
+    Handles the sell process when the hotkey is pressed.
+    """
+    debug_print(f"\n________________ Selling item with key {current_sell_all_key} ________________")
+    debug_print("Key pressed, processing...")
+
+    saved_mouse_pos = pyautogui.position()
+    pyautogui.moveTo(1, 1)
+
+    screenshot = take_screenshot()
+
+    quantity = detect_quantity(screenshot)
+    quantity_has_changed = True
+
+    last_price = {1: None, 10: None, 100: None}
+    current_price = find_current_price(screenshot, quantity)
+
+    while quantity is not None:
+        if not quantity_has_changed:
+            sell_item(screenshot, last_price[quantity], quick_sell=True)
+        else:
+            current_price = find_current_price(screenshot, quantity)
+            sell_item(screenshot, current_price)
+            last_price[quantity] = current_price
+
+        screenshot = take_screenshot()
+        new_quantity = detect_quantity(screenshot)
+
+        if new_quantity is None:
+            break
+
+        if new_quantity != quantity:
+            quantity = new_quantity
+            quantity_has_changed = True
+        else:
+            quantity_has_changed = False
+
+    pyautogui.moveTo(saved_mouse_pos)
+
+    debug_print(f"\nPress '{current_sell_all_key}' to list the item...")
+    debug_print("Press 'esc' to exit.")
+    debug_print("______________________________________________")
+
+
+def setup_hotkeys(hotkeys_map):
+    update_keybinds(hotkeys_map[SELL_KEY_KEY].get(), hotkeys_map[SELL_ALL_KEY_KEY].get())
