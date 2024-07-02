@@ -357,6 +357,7 @@ def sell_item(screenshot, current_price, quick_sell=False):
     if quick_sell:
         debug_print("Quick sell for price : " + str(current_price))
         pyautogui.press('enter')
+        time.sleep(0.16)
         return
 
     price_input_cue_path = f'{RES_PATH}price_input_cue.png'
@@ -398,6 +399,7 @@ def click_sell(screenshot, price='0'):
         pyautogui.press('enter')
         was_alt = True
         oui_screenshot = take_screenshot()
+
         tries = 0
 
         while sell_button_loc is None:
@@ -405,7 +407,7 @@ def click_sell(screenshot, price='0'):
             sell_button_loc, size = locate_element(oui_button_cue_path, oui_screenshot, 0.9, OUI_BUTTON_SEARCH_AREA)
             if sell_button_loc is None:
                 tries += 1
-            if tries > 10:
+            if tries > 5:
                 debug_print("Confirm sell button not found.")
                 return
             time.sleep(0.01)
@@ -486,7 +488,6 @@ def execute_sell_process(process_function, process_type):
     pyautogui.moveTo(saved_mouse_pos)
 
     debug_print(f"\nPress '{current_sell_key}' to list the item...")
-    debug_print("Press 'esc' to exit.")
     debug_print("______________________________________________")
 
 
