@@ -1,130 +1,28 @@
-import json
+import cv2
+import os
+import re
+import time
+
 import cv2
 import keyboard
-import pytesseract
-import pyautogui
 import numpy as np
-import re
-import os
-import time
+import pyautogui
 import pygetwindow as gw
-from enum import Enum
+from pytesseract import pytesseract
 
-# Constants
-TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-
-DEBUG_MODE = False
-CONFIG_PATH = 'config.json'
-DEFAULT_CONFIG_PATH = 'default_config.json'
-
-THRESHOLD = 180
-WHITE = 255
-RES_PATH = 'res/'
-DEBUG_PATH = 'debug/'
-LOCATE_ELEMENT_THRESHOLD = 0.7
-QUANTITY_ONE = '1'
-QUANTITY_TEN = '10'
-QUANTITY_HUNDRED = '100'
-SELL_SEARCH_AREA = (1 / 6.5, 1 / 6, 4 / 6, 1 / 6)  # (left, top, right, bottom)
-OUI_BUTTON_SEARCH_AREA = (2 / 7, 1 / 2, 3 / 7, 1 / 4)  # (left, top, right, bottom)
-
-DEBUG_MODE_KEY = 'DEBUG_MODE'
-SELL_KEY_KEY = 'SELL_KEY'
-SELL_ALL_KEY_KEY = 'SELL_ALL_KEY'
-
-QUANTITY_CUES = {
-    1: f'{RES_PATH}quantity_1_cue.png',
-    10: f'{RES_PATH}quantity_10_cue.png',
-    100: f'{RES_PATH}quantity_100_cue.png'
-}
-
-ALT_QUANTITY_CUES = {
-    1: f'{RES_PATH}quantity_1_cue_prefilled.png',
-    10: f'{RES_PATH}quantity_10_cue_prefilled.png',
-    100: f'{RES_PATH}quantity_100_cue_prefilled.png'
-}
+from utils.config import save_config_key
+from utils.constants import DEBUG_MODE, WHITE, RES_PATH, DEBUG_PATH, \
+    LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, SELL_SEARCH_AREA, \
+    WHITE_PIXEL_THRESHOLD, CUSTOM_TESSERACT_CONFIG, OUI_BUTTON_SEARCH_AREA, SELL_KEY_KEY, \
+    SELL_ALL_KEY_KEY, QUANTITY_CUES, ALT_QUANTITY_CUES
+from utils.data_classes import SellProcessType
+from utils.debug_utils import debug_print
 
 current_sell_key = '*'
 current_sell_all_key = '$'
 registered_hotkeys = []
 
 DOFUS_FOCUSED = False
-
-
-def debug_print(message):
-    # Prints a debug message if debugging mode is enabled.
-    if DEBUG_MODE:
-        print(message)
-
-
-def set_debug_mode(value):
-    global DEBUG_MODE
-    DEBUG_MODE = value
-    debug_print(f"Debug mode set to {DEBUG_MODE}")
-
-
-def save_config_key(key, value):
-    # Saves a single key-value pair to the configuration file.
-    config = load_config()
-    config[key] = value
-    save_config(config)
-
-
-def load_config():
-    # Loads the configuration from a file, checks its integrity, and saves it if it's incomplete.
-    # Returns:
-    # dict: The loaded and possibly updated configuration.
-    config = {}
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, 'r') as config_file:
-            config = json.load(config_file)
-            debug_print("Config loaded.")
-    else:
-        load_and_save_default_config()
-
-    if not check_config_integrity(config):
-        load_and_save_default_config()
-
-    return config
-
-
-def load_and_save_default_config():
-    # Loads the default configuration from a file and saves it to the config file.
-    with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
-        config = json.load(default_config_file)
-        save_config(config)
-        debug_print("Default config loaded and saved.")
-
-
-def check_config_integrity(config):
-    # Checks if the config is complete and updates it with default values if necessary.
-    # Args:
-    # config (dict): The configuration to check.
-    #
-    # Returns:
-    # bool: True if the configuration was already complete, False if it was updated.
-    with open(DEFAULT_CONFIG_PATH, 'r') as default_config_file:
-        default_config = json.load(default_config_file)
-
-    updated = False
-    for key in default_config:
-        if key not in config:
-            config[key] = default_config[key]
-            updated = True
-            debug_print("Config incomplete")
-
-    return not updated
-
-
-def save_config(config):
-    # Saves the configuration to a file.
-    # Args:
-    # config (dict): The configuration to save.
-    with open(CONFIG_PATH, 'w') as config_file:
-        json.dump(config, config_file, indent=4)
-        debug_print("Config saved.")
 
 
 def update_keybinds(new_sell_key, new_sell_all_key):
@@ -170,11 +68,6 @@ def hook_hotkeys():
         keyboard.add_hotkey(current_sell_key, handle_sell),
         keyboard.add_hotkey(current_sell_all_key, handle_sell_all)
     ]
-
-
-def get_debug_mode():
-    config = load_config()
-    return config.get(DEBUG_MODE_KEY, True)
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
@@ -240,14 +133,14 @@ def extract_table(roi):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
     if DEBUG_MODE:
-        cv2.imwrite(f'{RES_PATH}gray.png', gray)
+        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}gray.png', gray)
 
     # Adjust the threshold value slightly to improve precision
     adjusted_threshold = 160
     _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
     if DEBUG_MODE:
-        cv2.imwrite(f'{RES_PATH}thresholded.png', thresh)
+        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}thresholded.png', thresh)
 
     extracted_text = pytesseract.image_to_string(thresh, config=CUSTOM_TESSERACT_CONFIG)
 
@@ -294,7 +187,7 @@ def detect_prices(screenshot):
     while rows_detected < 3 and y_bot_l < height - 1:
         y_bot_l += 1
         horizontal_line = screenshot[y_bot_l, x_bot_l:x_top_r]
-        is_white_row = np.any(horizontal_line > THRESHOLD)
+        is_white_row = np.any(horizontal_line > WHITE_PIXEL_THRESHOLD)
 
         if not is_white_row and last_row_was_white:
             rows_detected += 1
@@ -310,7 +203,7 @@ def detect_prices(screenshot):
     roi = screenshot[y_top_r:bot_left_coord[1], bot_left_coord[0]:top_right_coord[0]]
 
     if DEBUG_MODE:
-        cv2.imwrite(f'{RES_PATH}roi.png', roi)
+        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}roi.png', roi)
 
     price_map = extract_table(roi)
 
@@ -450,19 +343,14 @@ def find_current_price(screenshot, quantity):
     return current_price
 
 
-class ProcessType(Enum):
-    SINGLE = "single"
-    ALL = "all"
-
-
 def handle_sell():
     # Handles the sell process when the hotkey is pressed.
-    execute_sell_process(single_sell_process, ProcessType.SINGLE)
+    execute_sell_process(single_sell_process, SellProcessType.SINGLE)
 
 
 def handle_sell_all():
     # Handles the sell process when the hotkey is pressed.
-    execute_sell_process(sell_all_process, ProcessType.ALL)
+    execute_sell_process(sell_all_process, SellProcessType.ALL)
 
 
 def execute_sell_process(process_function, process_type):
@@ -547,11 +435,5 @@ def is_game_window_open_and_focused():
     debug_print("Game window is either not open or not focused.")
     return False
 
-
 def setup_hotkeys(hotkeys_map):
     update_keybinds(hotkeys_map[SELL_KEY_KEY].get(), hotkeys_map[SELL_ALL_KEY_KEY].get())
-
-
-def check_game_window_focus(root):
-    refresh_focus_status()
-    root.after(15000, check_game_window_focus, root)

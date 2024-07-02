@@ -1,14 +1,14 @@
 import tkinter as tk
-from enum import Enum
-from utils import set_debug_mode, debug_print, save_config_key, load_config, \
-    DEBUG_MODE_KEY, SELL_KEY_KEY, SELL_ALL_KEY_KEY, update_keybinds, setup_hotkeys, refresh_focus_status, \
-    check_game_window_focus
 import uuid
 
-class MessageType(Enum):
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
+from logic import update_keybinds, setup_hotkeys
+from utils.config import save_config_key, load_config, get_value
+from utils.constants import SELL_KEY_KEY, SELL_ALL_KEY_KEY, DEBUG_MODE_KEY
+from utils.debug_utils import debug_print
+
+from utils.data_classes import MessageType
+from utils.debug_utils import set_debug_mode
+
 
 def start_gui():
     # Starts the GUI.
@@ -20,7 +20,7 @@ def start_gui():
         sell_key = sell_key_entry.get()
         sell_all_key = sell_all_key_entry.get()
 
-        if sell_key == config.get(SELL_KEY_KEY) and sell_all_key == config.get(SELL_ALL_KEY_KEY):
+        if sell_key == get_value(SELL_KEY_KEY) and sell_all_key == get_value(SELL_ALL_KEY_KEY):
             send_info_message("Keybinds have not changed.", MessageType.WARNING)
         elif sell_key and sell_all_key and sell_all_key != sell_key:
             update_keybinds(sell_key, sell_all_key)
@@ -87,6 +87,5 @@ def start_gui():
     setup_hotkeys(hotkeys_map)
     set_debug_mode(debug_var.get())
 
-    check_game_window_focus(root)
 
     root.mainloop()

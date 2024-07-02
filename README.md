@@ -74,15 +74,24 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
 7. Avoid moving your mouse during the sell process. Your mouse will come back to its original position after the process is done.
 
 ## File Structure
-- `DofusAutoSeller.py`: Main script to start the GUI and handle the selling process.
-- `gui.py`: Contains the GUI code.
-- `utils.py`: Utility functions for handling OCR, configuration, and keybinds.
-- `res/`: Directory containing image cues for detection.
-- res/debug: Directory containing screenshots taken during the process if debug mode is enabled.
-- `requirements.txt`: File containing the required Python packages.
-- `LICENSE`: MIT License file.
-- default_config.json: Default configuration file for the GUI.
-- config.json: Configuration file for the GUI (will be created after the first run and hold the user's configuration).
+````
+├── DofusAutoSeller.py
+├── gui.py
+├── logic.py
+├── res/
+│   ├── debug/
+├── utils/
+│   ├── config.py
+│   ├── constants.py
+│   ├── data_classes.py
+│   └── debug_utils.py
+├── LICENSE
+├── README.md
+├── config.json
+├── default_config.json
+└── requirements.txt
+
+````
 
 ## Contributing
 Feel free to open issues or submit pull requests for any improvements or bug fixes.
