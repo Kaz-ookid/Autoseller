@@ -10,13 +10,14 @@ import pyautogui
 import pygetwindow as gw
 from pytesseract import pytesseract
 
-from utils.config import save_config_key
-from utils.constants import DEBUG_MODE, WHITE, RES_PATH, DEBUG_PATH, \
+from utils.config import save_config_key, get_value
+from utils.constants import WHITE, RES_PATH, DEBUG_PATH, \
     LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, SELL_SEARCH_AREA, \
     WHITE_PIXEL_THRESHOLD, CUSTOM_TESSERACT_CONFIG, OUI_BUTTON_SEARCH_AREA, SELL_KEY_KEY, \
-    SELL_ALL_KEY_KEY, QUANTITY_CUES, ALT_QUANTITY_CUES
-from utils.data_classes import SellProcessType
+    SELL_ALL_KEY_KEY, QUANTITY_CUES, ALT_QUANTITY_CUES, DEBUG_MODE_KEY, PRICES_SEARCH_AREA, INPUTS_SEARCH_AREA
+from utils.data_classes import SellProcessType, PreviousLocation
 from utils.debug_utils import debug_print
+from utils.helpers import to_search_area
 
 current_sell_key = '*'
 current_sell_all_key = '$'
@@ -94,9 +95,9 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
     left, top, right, bottom = int(width * global_search_area[0]), int(height * global_search_area[1]), int(
         width * (1 - global_search_area[2])), int(height * (1 - global_search_area[3]))
 
-    if DEBUG_MODE:
+    if get_value(DEBUG_MODE_KEY):
         timestamp = int(time.time())
-        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}search_area_' + str(timestamp) + '.png', image[top:bottom, left:right])
+        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}search_area_' + str(timestamp) + '_' + str(np.random.randint(0, 10000)) + '.png', image[top:bottom, left:right])
 
     search_area = image_gray[top:bottom, left:right]
 
@@ -132,14 +133,14 @@ def extract_table(roi):
     # dict: A dictionary mapping quantities to prices.
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    if DEBUG_MODE:
+    if get_value(DEBUG_MODE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}gray.png', gray)
 
     # Adjust the threshold value slightly to improve precision
-    adjusted_threshold = 160
+    adjusted_threshold = 140
     _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
-    if DEBUG_MODE:
+    if get_value(DEBUG_MODE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}thresholded.png', thresh)
 
     extracted_text = pytesseract.image_to_string(thresh, config=CUSTOM_TESSERACT_CONFIG)
@@ -172,7 +173,7 @@ def detect_prices(screenshot):
     price_table_header_cue_path = f'{RES_PATH}price_table_cue.png'
     price_table_header_cue_dim = cv2.imread(price_table_header_cue_path, 0).shape
 
-    price_loc, _ = locate_element(price_table_header_cue_path, screenshot)
+    price_loc, _ = locate_element(price_table_header_cue_path, screenshot, global_search_area=PRICES_SEARCH_AREA)
     if price_loc is None:
         debug_print("Price table not found.")
         return None
@@ -183,6 +184,7 @@ def detect_prices(screenshot):
     height, width, _ = screenshot.shape
 
     rows_detected = 0
+    max_height = 0
     last_row_was_white = False
     while rows_detected < 3 and y_bot_l < height - 1:
         y_bot_l += 1
@@ -194,7 +196,17 @@ def detect_prices(screenshot):
 
         last_row_was_white = is_white_row
 
-    y_bot_l += 10
+        if max_height == 0:
+            if rows_detected == 1:
+                debug_print("y_bot_l: " + str(y_bot_l))
+                debug_print("y_top_r: " + str(y_top_r))
+                max_height = (y_bot_l - y_top_r) * 5 + y_top_r
+                debug_print("max_height: " + str(max_height))
+
+        if max_height != 0 and y_bot_l > max_height:
+            break
+
+    y_bot_l += 10 # margin
     y_bot_l = min(y_bot_l, height - 1)
 
     top_right_coord = (x_top_r, y_top_r)
@@ -202,7 +214,7 @@ def detect_prices(screenshot):
 
     roi = screenshot[y_top_r:bot_left_coord[1], bot_left_coord[0]:top_right_coord[0]]
 
-    if DEBUG_MODE:
+    if get_value(DEBUG_MODE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}roi.png', roi)
 
     price_map = extract_table(roi)
@@ -224,19 +236,22 @@ def detect_quantity(screenshot):
     # int: The detected quantity, or None if not found.
 
     for quantity, cue_path in QUANTITY_CUES.items():
-        loc, _ = locate_element(cue_path, screenshot, 0.98)
+        loc, _ = locate_element(cue_path, screenshot, 0.98, global_search_area=INPUTS_SEARCH_AREA)
         if loc is not None:
             debug_print(f"Quantity {quantity} detected.")
             return quantity
 
     for quantity, cue_path in ALT_QUANTITY_CUES.items():
-        loc, _ = locate_element(cue_path, screenshot, 0.98)
+        loc, _ = locate_element(cue_path, screenshot, 0.98, INPUTS_SEARCH_AREA)
         if loc is not None:
             debug_print(f"Quantity {quantity} detected.")
             return quantity
 
     debug_print("\nQuantity not detected.")
     return None
+
+
+previous_price_input_loc = None
 
 
 def sell_item(screenshot, current_price, quick_sell=False):
@@ -247,6 +262,10 @@ def sell_item(screenshot, current_price, quick_sell=False):
     # current_price (int): The price to list the item at.
     # quick_sell (bool): Whether to skip the price input field and list the item at the current price.
 
+    global previous_price_input_loc
+
+    screen_width, screen_height = screenshot.shape[1], screenshot.shape[0]
+
     if quick_sell:
         debug_print("Quick sell for price : " + str(current_price))
         pyautogui.press('enter')
@@ -254,13 +273,42 @@ def sell_item(screenshot, current_price, quick_sell=False):
         return
 
     price_input_cue_path = f'{RES_PATH}price_input_cue.png'
-    price_input_loc, size = locate_element(price_input_cue_path, screenshot)
-    if price_input_loc is None:
-        debug_print("Price input field not found.")
-        return
 
-    if current_price is None:
-        debug_print("Invalid price detected.")
+    # Attempt to locate the price input field
+    price_input_loc, size = None, None
+    if previous_price_input_loc:
+        debug_print(f"Using previous price input location: {previous_price_input_loc}")
+
+        # Convert the previous coordinates to fractions of the screen size
+        search_area_coords = (
+            previous_price_input_loc.x - 10,
+            previous_price_input_loc.y - 10,
+            previous_price_input_loc.x + previous_price_input_loc.w + 10,
+            previous_price_input_loc.y + previous_price_input_loc.h + 10
+        )
+        search_area = to_search_area(search_area_coords, (screen_width, screen_height))
+
+        debug_print(f"Calculated search area based on previous location: {search_area}")
+
+        price_input_loc, size = locate_element(price_input_cue_path, screenshot, global_search_area=search_area)
+
+    # If not found in the reduced search area, try to locate it in the base one
+    if price_input_loc is None:
+        debug_print("Price input not found in previous location area. Searching in the full area.")
+
+        price_input_loc, size = locate_element(price_input_cue_path, screenshot, global_search_area=INPUTS_SEARCH_AREA)
+
+        if price_input_loc is None:
+            debug_print("Price input field not found in the full search area.")
+            return
+
+    # Update previous_price_input_loc with the found location
+    previous_price_input_loc = PreviousLocation(price_input_loc[0], price_input_loc[1], size[0], size[1])
+
+    debug_print(f"Updated previous price input location to: {previous_price_input_loc}")
+
+    if current_price is None or current_price <= 0:
+        debug_print("Invalid price detected. Operation aborted.")
         return
 
     click_x = price_input_loc[0] + size[0] + 50
@@ -268,9 +316,6 @@ def sell_item(screenshot, current_price, quick_sell=False):
 
     price_value = current_price - 1
     price = str(price_value)
-    if price_value <= 0:
-        debug_print("Invalid price detected.")
-        return
 
     pyautogui.click(click_x, click_y)
     pyautogui.hotkey('ctrl', 'a')
@@ -285,7 +330,7 @@ def sell_item(screenshot, current_price, quick_sell=False):
 def click_sell(screenshot, price='0'):
     was_alt = False
     sell_button_cue_path = f'{RES_PATH}sell_button_cue.png'
-    sell_button_loc, size = locate_element(sell_button_cue_path, screenshot)
+    sell_button_loc, size = locate_element(sell_button_cue_path, screenshot, global_search_area=INPUTS_SEARCH_AREA)
     if sell_button_loc is None:
         debug_print("Sell button not found.")
 
@@ -434,6 +479,7 @@ def is_game_window_open_and_focused():
         return True
     debug_print("Game window is either not open or not focused.")
     return False
+
 
 def setup_hotkeys(hotkeys_map):
     update_keybinds(hotkeys_map[SELL_KEY_KEY].get(), hotkeys_map[SELL_ALL_KEY_KEY].get())

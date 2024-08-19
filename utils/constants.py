@@ -4,7 +4,6 @@ TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 CUSTOM_TESSERACT_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789'
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
-DEBUG_MODE = False
 CONFIG_PATH = 'config.json'
 DEFAULT_CONFIG_PATH = 'default_config.json'
 
@@ -16,8 +15,10 @@ LOCATE_ELEMENT_THRESHOLD = 0.7
 QUANTITY_ONE = '1'
 QUANTITY_TEN = '10'
 QUANTITY_HUNDRED = '100'
-SELL_SEARCH_AREA = (1 / 6.5, 1 / 6, 4 / 6, 1 / 6)  # (left, top, right, bottom)
-OUI_BUTTON_SEARCH_AREA = (2 / 7, 1 / 2, 3 / 7, 1 / 4)  # (left, top, right, bottom)
+SELL_SEARCH_AREA = (1 / 6.5, 1 / 6, 0.7, 1 / 6)  # (left, top, right, bottom)
+OUI_BUTTON_SEARCH_AREA = (2 / 7, 1 / 2, 3 / 7, 1 / 4)
+INPUTS_SEARCH_AREA = (1 / 6.5, 1/6, 0.7, 1 / 2)
+PRICES_SEARCH_AREA = (1 / 6.5, 0.45, 0.7, 1 / 6)
 
 DEBUG_MODE_KEY = 'DEBUG_MODE'
 SELL_KEY_KEY = 'SELL_KEY'
