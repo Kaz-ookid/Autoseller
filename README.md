@@ -34,7 +34,8 @@ Within the DofusAutoSell directory, run:
  ## Configuration
 
 ### Tesseract-OCR
-1. Set the path to the Tesseract-OCR executable in the `utils.py` file:
+Install latest version of Tesseract-OCR, for example from [here](https://digi.bib.uni-mannheim.de/tesseract/)
+1. Set the path to the Tesseract-OCR executable in the `utils/constants.py` file:
     ```python
     TESSERACT_CMD = r'<path_to_tesseract_executable>'
     ```
