@@ -386,9 +386,13 @@ def single_sell_process(screenshot):
     # Args:
     # screenshot (np.ndarray): The screenshot image.
     quantity = detect_quantity(screenshot)
-    current_price = find_current_price(screenshot, quantity)
-    sell_item(screenshot, current_price)
-
+    if quantity is not None:
+        current_price = find_current_price(screenshot, quantity)
+        if current_price is not None:
+            sell_item(screenshot, current_price)
+            return
+    debug_print("Operation aborted.")
+    return
 
 def sell_all_process(screenshot):
     # Executes the unique part of the sell all process.
@@ -396,16 +400,21 @@ def sell_all_process(screenshot):
     # Args:
     # screenshot (np.ndarray): The screenshot image.
     quantity = detect_quantity(screenshot)
+    if quantity is None:
+        debug_print("Operation aborted.")
+        return
     quantity_has_changed = True
 
     last_price = {1: None, 10: None, 100: None}
-    current_price = find_current_price(screenshot, quantity)
 
     while quantity is not None:
         if not quantity_has_changed:
             sell_item(screenshot, last_price[quantity], quick_sell=True)
         else:
             current_price = find_current_price(screenshot, quantity)
+            if current_price is None:
+                debug_print("Operation aborted.")
+                break
             sell_item(screenshot, current_price)
             last_price[quantity] = current_price
 
@@ -413,6 +422,7 @@ def sell_all_process(screenshot):
         new_quantity = detect_quantity(screenshot)
 
         if new_quantity is None:
+            debug_print("Operation aborted.")
             break
 
         if new_quantity != quantity:

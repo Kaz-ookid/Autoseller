@@ -21,4 +21,3 @@ def to_search_area(corners, screen_size):
         1 - (right / screen_width),
         1 - (bottom / screen_height)
     )
-
