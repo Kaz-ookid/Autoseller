@@ -433,7 +433,6 @@ def is_game_window_open_and_focused():
     if focused_window and any(focused_window.title == w.title for w in game_windows):
         debug_print(f"Game window {focused_window.title} is focused.")
         return True
-    debug_print("Game window is either not open or not focused.")
     return False
 
 

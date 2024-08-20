@@ -1,5 +1,8 @@
+import os
 import tkinter as tk
 import uuid
+
+from PIL import ImageTk, Image
 
 from logic import update_keybinds, KEYBINDS_FUNCTIONS
 from utils.config import save_config_key, load_config, get_value
@@ -60,6 +63,9 @@ def start_gui():
     root.title("Dofus AutoSeller")
     root.geometry("300x200")
     root.protocol("WM_DELETE_WINDOW", on_exit)
+
+    icon_path = r'res/logo/DAS_icon.ico'
+    root.iconbitmap(False, icon_path)
 
     current_message = tk.StringVar(value="")
 

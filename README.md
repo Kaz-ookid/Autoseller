@@ -1,4 +1,6 @@
- # Dofus AutoSeller
+![Logo Banner](res/logo/DAS_banner.png)
+
+# Dofus AutoSeller
 
  This script automates the process of selling items in the Dofus game. It captures the screen, detects the price table, determines the appropriate quantity, and automates the interaction with the game's selling interface.
 
