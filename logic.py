@@ -394,6 +394,7 @@ def single_sell_process(screenshot):
     debug_print("Operation aborted.")
     return
 
+
 def sell_all_process(screenshot):
     # Executes the unique part of the sell all process.
     #
@@ -447,13 +448,11 @@ def is_game_window_open_and_focused():
 
 
 def update_keybinds(hotkeys_map, initial_setup=False):
-    """
-    Updates the key bindings for various actions.
+    # Updates the key bindings for various actions.
+    # Args:
+    # hotkeys_map (list of tuples): A list of tuples, each containing the action name,
+    # the keybinding, and the function to be executed.
 
-    Args:
-    hotkeys_map (list of tuples): A list of tuples, each containing the action name,
-                                  the keybinding, and the function to be executed.
-    """
     # Unhook only the hotkeys that are in the hotkeys_map
     if not initial_setup:
         for action, key, function in hotkeys_map:
