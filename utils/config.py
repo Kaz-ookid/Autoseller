@@ -1,7 +1,7 @@
 import json
 import os
 
-from utils.constants import CONFIG_PATH, DEFAULT_CONFIG_PATH, DEBUG_MODE_KEY
+from utils.constants import CONFIG_PATH, DEFAULT_CONFIG_PATH
 from utils.debug_utils import debug_print
 
 

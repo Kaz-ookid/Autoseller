@@ -1,4 +1,3 @@
-import cv2
 import os
 import re
 import time
@@ -10,65 +9,20 @@ import pyautogui
 import pygetwindow as gw
 from pytesseract import pytesseract
 
-from utils.config import save_config_key, get_value
+from utils.config import save_config_key, get_value, load_config
 from utils.constants import WHITE, RES_PATH, DEBUG_PATH, \
     LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, SELL_SEARCH_AREA, \
-    WHITE_PIXEL_THRESHOLD, CUSTOM_TESSERACT_CONFIG, OUI_BUTTON_SEARCH_AREA, SELL_KEY_KEY, \
-    SELL_ALL_KEY_KEY, QUANTITY_CUES, ALT_QUANTITY_CUES, DEBUG_MODE_KEY, PRICES_SEARCH_AREA, INPUTS_SEARCH_AREA
+    WHITE_PIXEL_THRESHOLD, CUSTOM_TESSERACT_CONFIG, OUI_BUTTON_SEARCH_AREA, \
+    QUANTITY_CUES, ALT_QUANTITY_CUES, DEBUG_MODE_TOGGLE_KEY, PRICES_SEARCH_AREA, INPUTS_SEARCH_AREA, SELL_JSON_KEY, \
+    SELL_ALL_JSON_KEY
 from utils.data_classes import SellProcessType, PreviousLocation
 from utils.debug_utils import debug_print
 from utils.helpers import to_search_area
 
-current_sell_key = '*'
-current_sell_all_key = '$'
+current_keybindings = load_config()
 registered_hotkeys = []
 
 DOFUS_FOCUSED = False
-
-
-def update_keybinds(new_sell_key, new_sell_all_key):
-    # Updates the key bindings for selling items.
-    # Args:
-    # new_sell_key (str): The new key for selling a single item.
-    # new_sell_all_key (str): The new key for selling all items.
-    global current_sell_key, current_sell_all_key, registered_hotkeys
-
-    # Unhook only if there are registered hotkeys
-    if registered_hotkeys:
-        for hotkey in registered_hotkeys:
-            keyboard.remove_hotkey(hotkey)
-
-    current_sell_key = new_sell_key
-    current_sell_all_key = new_sell_all_key
-
-    # Add the new hotkeys and store their references
-    registered_hotkeys = [
-        keyboard.add_hotkey(current_sell_key, handle_sell),
-        keyboard.add_hotkey(current_sell_all_key, handle_sell_all)
-    ]
-
-    save_config_key(SELL_KEY_KEY, current_sell_key)
-    save_config_key(SELL_ALL_KEY_KEY, current_sell_all_key)
-
-    debug_print(f"Updated keybinds: Sell -> '{current_sell_key}', Sell All -> '{current_sell_all_key}'")
-
-
-def unhook_hotkeys():
-    # Unhook all registered hotkeys.
-    global registered_hotkeys
-    if registered_hotkeys:
-        for hotkey in registered_hotkeys:
-            keyboard.remove_hotkey(hotkey)
-        registered_hotkeys = []
-
-
-def hook_hotkeys():
-    # Re-hook the hotkeys.
-    global current_sell_key, current_sell_all_key, registered_hotkeys
-    registered_hotkeys = [
-        keyboard.add_hotkey(current_sell_key, handle_sell),
-        keyboard.add_hotkey(current_sell_all_key, handle_sell_all)
-    ]
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
@@ -95,9 +49,11 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
     left, top, right, bottom = int(width * global_search_area[0]), int(height * global_search_area[1]), int(
         width * (1 - global_search_area[2])), int(height * (1 - global_search_area[3]))
 
-    if get_value(DEBUG_MODE_KEY):
+    if get_value(DEBUG_MODE_TOGGLE_KEY):
         timestamp = int(time.time())
-        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}search_area_' + str(timestamp) + '_' + str(np.random.randint(0, 10000)) + '.png', image[top:bottom, left:right])
+        cv2.imwrite(
+            f'{RES_PATH}{DEBUG_PATH}search_area_' + str(timestamp) + '_' + str(np.random.randint(0, 10000)) + '.png',
+            image[top:bottom, left:right])
 
     search_area = image_gray[top:bottom, left:right]
 
@@ -133,14 +89,14 @@ def extract_table(roi):
     # dict: A dictionary mapping quantities to prices.
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    if get_value(DEBUG_MODE_KEY):
+    if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}gray.png', gray)
 
     # Adjust the threshold value slightly to improve precision
     adjusted_threshold = 140
     _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
-    if get_value(DEBUG_MODE_KEY):
+    if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}thresholded.png', thresh)
 
     extracted_text = pytesseract.image_to_string(thresh, config=CUSTOM_TESSERACT_CONFIG)
@@ -206,7 +162,7 @@ def detect_prices(screenshot):
         if max_height != 0 and y_bot_l > max_height:
             break
 
-    y_bot_l += 10 # margin
+    y_bot_l += 10  # margin
     y_bot_l = min(y_bot_l, height - 1)
 
     top_right_coord = (x_top_r, y_top_r)
@@ -214,7 +170,7 @@ def detect_prices(screenshot):
 
     roi = screenshot[y_top_r:bot_left_coord[1], bot_left_coord[0]:top_right_coord[0]]
 
-    if get_value(DEBUG_MODE_KEY):
+    if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}roi.png', roi)
 
     price_map = extract_table(roi)
@@ -420,7 +376,7 @@ def execute_sell_process(process_function, process_type):
 
     pyautogui.moveTo(saved_mouse_pos)
 
-    debug_print(f"\nPress '{current_sell_key}' to list the item...")
+    debug_print(f"\nPress key to list the item...")
     debug_print("______________________________________________")
 
 
@@ -481,5 +437,34 @@ def is_game_window_open_and_focused():
     return False
 
 
-def setup_hotkeys(hotkeys_map):
-    update_keybinds(hotkeys_map[SELL_KEY_KEY].get(), hotkeys_map[SELL_ALL_KEY_KEY].get())
+def update_keybinds(hotkeys_map, initial_setup=False):
+    """
+    Updates the key bindings for various actions.
+
+    Args:
+    hotkeys_map (list of tuples): A list of tuples, each containing the action name,
+                                  the keybinding, and the function to be executed.
+    """
+    # Unhook only the hotkeys that are in the hotkeys_map
+    if not initial_setup:
+        for action, key, function in hotkeys_map:
+            current_key = get_value(action)
+            if current_key:
+                # Remove the old hotkey binding if it exists
+                keyboard.remove_hotkey(current_key)
+
+    # Update or add new keybindings
+    for action, key, function in hotkeys_map:
+        # Register the hotkey
+        keyboard.add_hotkey(key, function)
+
+        # Save the configuration for each updated key
+        save_config_key(action, key)
+
+    debug_print(f"Updated keybinds: {[(action, key) for action, key, _ in hotkeys_map]}")
+
+
+KEYBINDS_FUNCTIONS = {
+    SELL_JSON_KEY: handle_sell,
+    SELL_ALL_JSON_KEY: handle_sell_all,
+}
