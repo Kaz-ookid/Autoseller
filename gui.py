@@ -1,8 +1,5 @@
-import os
 import tkinter as tk
 import uuid
-
-from PIL import ImageTk, Image
 
 from logic import update_keybinds, KEYBINDS_FUNCTIONS
 from utils.config import save_config_key, load_config, get_value

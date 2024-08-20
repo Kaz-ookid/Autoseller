@@ -1,5 +1,3 @@
-from fractions import Fraction
-
 
 def to_search_area(corners, screen_size):
     """
