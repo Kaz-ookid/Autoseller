@@ -16,17 +16,26 @@ This project is WIP. It is ready for early use but it is not yet fully optimized
  ## Prerequisites
  - Python 3.x
  - Required Python packages (install using `pip install -r requirements.txt`)
+ - git
 
  ## Installation
 
- ### Clone the Repository
+Please reach out to me if you encounter any issues during the installation process.
+
+ ### Clone the Repository and Navigate to the Directory
  ```bash
  git clone <repository_url>
  cd <repository_directory>
  ```
 
+This could look like :
+```bash
+git clone https://github.com/Kaz-ookid/Autoseller
+cd Autoseller
+  ```
+
  ### Install Python Dependencies
-Within the DofusAutoSell directory, run:
+Within the AutoSell directory, run:
  ```bash
  pip install -r requirements.txt
  ```
@@ -100,7 +109,7 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
 ````
 
 ## Contributing
-Feel free to open issues or submit pull requests for any improvements or bug fixes.
+Feel free to open issues or submit pull requests for any improvements or bug fixes. Please, work on a new branch.
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
