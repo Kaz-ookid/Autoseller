@@ -25,14 +25,18 @@ Please reach out to me if you encounter any issues during the installation proce
  ### Clone the Repository and Navigate to the Directory
  ```bash
  git clone <repository_url>
+ ```
+```bash
  cd <repository_directory>
  ```
 
 This could look like :
 ```bash
 git clone https://github.com/Kaz-ookid/Autoseller
+``` 
+```bash
 cd Autoseller
-  ```
+```
 
  ### Install Python Dependencies
 Within the AutoSell directory, run:
@@ -109,7 +113,7 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
 ````
 
 ## Contributing
-Feel free to open issues or submit pull requests for any improvements or bug fixes. Please, work on a new branch.
+Feel free to open issues or submit pull requests for any improvements or bug fixes
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
