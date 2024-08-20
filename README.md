@@ -1,5 +1,8 @@
 ![Logo Banner](res/logo/DAS_banner.png)
 
+# DISCLAIMER
+This project is WIP. It is ready for early use but it is not yet fully optimized, bug free and some features are still missing. Please report any bugs you encounter. I advise you to not hold more than necessary Kamas, in case of a wrong computation of prices, and indecently high taxes. However, I have been using it for a while now and it works perfectly fine in the most cases for me. 
+
 # Dofus AutoSeller
 
  This script automates the process of selling items in the Dofus game. It captures the screen, detects the price table, determines the appropriate quantity, and automates the interaction with the game's selling interface.
