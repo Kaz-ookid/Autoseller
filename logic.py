@@ -49,9 +49,9 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
     original_width = 2560
     original_height = 1440
 
-    scale_factor = min(current_width / original_width, current_height / original_height)
-    max_scaling_attempts = 5  # Number of attempts to resize the template
-    scaling_increment = 1.05  # Increment scale by 5% each attempt
+    scale_factor = min(current_width / original_width, current_height / original_height) * 0.9
+    max_scaling_attempts = 10  # Number of attempts to resize the template
+    scaling_increment = 1.02  # Increment scale by 5% each attempt
 
     image_rgb = image  # Assuming the input 'image' is already in BGR format
     height, width = image_rgb.shape[:2]
@@ -63,7 +63,7 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
     for attempt in range(max_scaling_attempts):
         new_width = int(template_original_width * scale_factor)
         new_height = int(template_original_height * scale_factor)
-        template_resized = cv2.resize(template, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        template_resized = cv2.resize(template, (new_width, new_height), fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
         if get_value(DEBUG_MODE_TOGGLE_KEY):
             debug_screenshot_with_template(search_area, template_resized)
@@ -95,7 +95,7 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
 
 def save_found_element(image, x, y, width, height):
     """Save the found element as an image for debugging purposes."""
-    found_element = image[y:y+height, x:x+width]
+    found_element = image[y:y + height, x:x + width]
     debug_path = f'{RES_PATH}{DEBUG_PATH}{DEBUG_FOUND_ELEMENTS_PATH}'
     os.makedirs(debug_path, exist_ok=True)
     debug_file_path = os.path.join(debug_path, f'found_element_{int(time.time())}.png')
@@ -122,7 +122,6 @@ def debug_screenshot_with_template(screen_image, template_image):
     cv2.imwrite(debug_file_path, screen_image_with_template)
 
 
-
 def take_screenshot():
     screenshot = pyautogui.screenshot()
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
@@ -130,11 +129,13 @@ def take_screenshot():
 
 def extract_text(roi):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    # upgrade resolution
+    gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
 
     if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}gray.png', gray)
 
-    adjusted_threshold = 140
+    adjusted_threshold = 125
     _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
     if get_value(DEBUG_MODE_TOGGLE_KEY):
@@ -222,7 +223,7 @@ def detect_quantity(screenshot):
     quantity_title_cue_path = f'{RES_PATH}quantity_title_cue.png'
 
     def position_offset(x, y, w, h):
-        return x, y, 2*w, h
+        return x, y, 2 * w, h
 
     # Locate the quantity number by applying the offset to the title's position
     quantity_loc, size = get_element_coordinates(
@@ -316,39 +317,103 @@ def sell_item(screenshot, current_price, quick_sell=False):
     click_sell(screenshot, price=price)
 
 
+sell_button_area = Coordinates(0, 0, 0, 0)
+oui_button_area = Coordinates(0, 0, 0, 0)
+
+
 def click_sell(screenshot, price='0'):
-    was_alt = False
+    def position_offset(x, y, w, h):
+        global sell_button_area
+        sell_button_area = Coordinates(x - 50, y - 50, w + 100, h + 100)
+        return x + (2 * w) / 3, y + h // 2, w, h
+
+    def alt_position_offset(x, y, w, h):
+        global sell_button_area
+        sell_button_area = Coordinates(x - w - 50, y - 50, w * 2 + 100, h + 100)
+        return x + w // 2, y + h // 2, w, h
+
+    def oui_button_offset(x, y, w, h):
+        global oui_button_area
+        oui_button_area = Coordinates(x - 25, y - 25, w + 50, h * 5)
+        return x + w // 2, y + h // 2, w, h
+
     sell_button_cue_path = f'{RES_PATH}sell_button_cue.png'
-    sell_button_loc, size = get_element_coordinates('sell_button', sell_button_cue_path, screenshot)
+    sell_button_loc, size = get_element_coordinates('sell_button'
+                                                    , sell_button_cue_path, screenshot
+                                                    , offset_function=position_offset)
+
     if sell_button_loc is None:
-        debug_print("Sell button not found.")
+        sell_button_loc, size = get_element_coordinates('sell_button'
+                                                        , f'{RES_PATH}sell_button_cue_alt.png', screenshot
+                                                        , offset_function=alt_position_offset)
+        if sell_button_loc is None:
+            debug_print("Sell button not found.")
+            return
 
+    global sell_button_area
+    reduced_screenshot = screenshot[sell_button_area.y:sell_button_area.y + sell_button_area.size[1]
+    , sell_button_area.x:sell_button_area.x + sell_button_area.size[0]]
+
+    check_first_button = locate_element(sell_button_cue_path, reduced_screenshot, LOCATE_TITLE_THRESHOLD)[0]
+
+    if check_first_button is not None:
+        pyautogui.click(sell_button_loc[0], sell_button_loc[1])
+        debug_print("Item listed at price : " + price)
+        return
+
+    check_alt_button = locate_element(f'{RES_PATH}sell_button_cue_alt.png'
+                                      , reduced_screenshot
+                                      , LOCATE_TITLE_THRESHOLD)[0]
+
+    if check_alt_button is not None:
+        global oui_button_area
         pyautogui.press('enter')
-        was_alt = True
+        time.sleep(0.2)
         oui_screenshot = take_screenshot()
-
         tries = 0
 
-        while sell_button_loc is None:
-            oui_button_cue_path = f'{RES_PATH}oui_button_cue.png'
-            sell_button_loc, size = locate_element(oui_button_cue_path, oui_screenshot, 0.9)
-            if sell_button_loc is None:
-                tries += 1
-            if tries > 5:
-                debug_print("Confirm sell button not found.")
-                return
+        oui_button_cue_path = f'{RES_PATH}oui_button_cue.png'
+        oui_button_loc, size = get_element_coordinates('oui_button'
+                                                       , oui_button_cue_path, oui_screenshot
+                                                       , offset_function=oui_button_offset
+                                                       , threshold=0.85)
+
+        while oui_button_loc is None:
+            if tries > 3:
+                break
             time.sleep(0.01)
             oui_screenshot = take_screenshot()
+            tries += 1
+            oui_button_loc, size = get_element_coordinates('oui_button'
+                                                           , oui_button_cue_path, oui_screenshot
+                                                           , offset_function=oui_button_offset
+                                                           , threshold=0.85)
 
-    click_x = sell_button_loc[0] + size[0] // 2
-    click_y = sell_button_loc[1] + size[1] // 2
+        if oui_button_loc is not None:
+            time.sleep(0.1)
+            oui_button_reduced_screenshot = oui_screenshot[oui_button_area.y:oui_button_area.y + oui_button_area.size[1]
+            , oui_button_area.x:oui_button_area.x + oui_button_area.size[0]]
+            oui_button_check_loc, oui_button_check_size = locate_element(f'{RES_PATH}oui_button_cue.png'
+                                                                         , oui_button_reduced_screenshot)
+            tries = 0
+            while oui_button_check_loc is None:
+                if tries > 3:
+                    break
+                time.sleep(0.25)
+                tries += 1
+                oui_button_reduced_screenshot = take_screenshot()[
+                                                oui_button_area.y:oui_button_area.y + oui_button_area.size[1]
+                , oui_button_area.x:oui_button_area.x + oui_button_area.size[0]]
+                oui_button_check_loc, oui_button_check_size = locate_element(f'{RES_PATH}oui_button_cue.png'
+                                                                             , oui_button_reduced_screenshot)
 
-    pyautogui.click(click_x, click_y)
+            if oui_button_check_loc is not None:
+                pyautogui.click(oui_button_check_loc[0] + oui_button_check_size[0] // 2 + oui_button_area.x,
+                                oui_button_check_loc[1] + oui_button_check_size[1] // 2 + oui_button_area.y)
+                debug_print("Item price modified to adjusted price: " + price)
+                return
 
-    if was_alt:
-        debug_print("Item price modified to adjusted price: " + price)
-    else:
-        debug_print("Item listed at adjusted price : " + price)
+        debug_print("Confirm sell button not found.")
 
 
 def find_current_price(screenshot, quantity):
