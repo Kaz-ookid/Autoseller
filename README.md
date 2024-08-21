@@ -47,7 +47,7 @@ Within the AutoSell directory, run:
  ## Configuration
 
 ### Tesseract-OCR
-Install latest version of Tesseract-OCR, for example from [here](https://digi.bib.uni-mannheim.de/tesseract/)
+Install latest version of Tesseract-OCR, for example from [here](https://github.com/UB-Mannheim/tesseract/wiki)
 1. Set the path to the Tesseract-OCR executable in the `utils/constants.py` file:
     ```python
     TESSERACT_CMD = r'<path_to_tesseract_executable>'
