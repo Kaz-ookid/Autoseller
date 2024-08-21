@@ -98,6 +98,8 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
 5. Press `$` (by default) to sell the whole stack of the item, starting from the selected quantity to the lowest to sell everything (100, then 10, then 1 until gone). 
 6. If you have items already listed in HdV, after selecting them you can press `*` to modify the price and list it back to update the price to -1. It works for updating multiple of the same item in the same quantity packs.
 7. Avoid moving your mouse during the sell process. Your mouse will come back to its original position after the process is done.
+8. Make sure to have the Dofus window the bigger possible to avoid any issues with the image recognition. Click the "Reset Coordinates" button if you ever resize the Dofus window.
+9. Every first action will take a bit longer as the script will take screenshots of the HdV to detect the coordinates of the different elements. After that, the process will be faster.
 
 ## File Structure
 ````
