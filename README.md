@@ -15,7 +15,7 @@ This project is WIP. It is ready for early use but it is not yet fully optimized
 
  ## Prerequisites
 - git - [latest version](https://www.atlassian.com/fr/git/tutorials/install-git)
-- Python 3.x - [latest version](https://www.python.org/downloads/)
+- Python 3.1x - [latest version](https://www.python.org/downloads/)
 - Required Python packages (install using `pip install -r requirements.txt`)
 - Tesseract-OCR - [latest version](https://github.com/UB-Mannheim/tesseract/wiki)
 
