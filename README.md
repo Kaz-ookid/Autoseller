@@ -17,16 +17,16 @@ This project is WIP. It is ready for early use but it is not yet fully optimized
 - git - [latest version](https://www.atlassian.com/fr/git/tutorials/install-git)
 - Python 3.x - [latest version](https://www.python.org/downloads/)
 - Required Python packages (install using `pip install -r requirements.txt`)
- - Tesseract-OCR - [latest version](https://github.com/UB-Mannheim/tesseract/wiki)
+- Tesseract-OCR - [latest version](https://github.com/UB-Mannheim/tesseract/wiki)
 
  ## Installation
 
 Please reach out to me if you encounter any issues during the installation process.
 
- ### Clone the Repository and Navigate to the Directory
- ```bash
- git clone <repository_url>
- ```
+### Clone the Repository and Navigate to the Directory
+```bash
+git clone <repository_url>
+```
 ```bash
  cd <repository_directory>
  ```
@@ -41,20 +41,20 @@ cd Autoseller
 
  ### Install Python Dependencies
 Within the AutoSell directory, run:
- ```bash
- pip install -r requirements.txt
- ```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
  ## Configuration
 
 ### Tesseract-OCR
 Install latest version of Tesseract-OCR, for example from [here](https://github.com/UB-Mannheim/tesseract/wiki)
 1. Set the path to the Tesseract-OCR executable in the `utils/constants.py` file:
-    ```python
+    ```bash
     TESSERACT_CMD = r'<path_to_tesseract_executable>'
     ```
     For example (usually you can find it there):
-    ```python
+    ```bash
     TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     ```
 2. If you encounter any problem, ensure the Tesseract-OCR executable is in your system's PATH.
@@ -82,6 +82,12 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
     ```bash
     python DofusAutoSeller.py
     ```
+    
+    If the terminal closes upon running the script, try this:
+    ```bash
+    python -i DofusAutoSeller.py
+    ```
+    
  2. The GUI will start, where you can configure your keybinds and toggle debug mode. (more features are coming soon)
 
  ## Usage
