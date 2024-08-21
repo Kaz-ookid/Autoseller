@@ -11,30 +11,20 @@ from pytesseract import pytesseract
 
 from utils.config import save_config_key, get_value, load_config
 from utils.constants import WHITE, RES_PATH, DEBUG_PATH, \
-    LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, SELL_SEARCH_AREA, \
-    WHITE_PIXEL_THRESHOLD, CUSTOM_TESSERACT_CONFIG, OUI_BUTTON_SEARCH_AREA, \
-    QUANTITY_CUES, ALT_QUANTITY_CUES, DEBUG_MODE_TOGGLE_KEY, PRICES_SEARCH_AREA, INPUTS_SEARCH_AREA, SELL_JSON_KEY, \
-    SELL_ALL_JSON_KEY
-from utils.data_classes import SellProcessType, PreviousLocation
+    LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, WHITE_PIXEL_THRESHOLD, \
+    CUSTOM_TESSERACT_CONFIG, DEBUG_MODE_TOGGLE_KEY, SELL_JSON_KEY, \
+    SELL_ALL_JSON_KEY, ALL_SCREEN_SEARCH_AREA
+from utils.data_classes import SellProcessType, Coordinates
 from utils.debug_utils import debug_print
-from utils.helpers import to_search_area
 
 current_keybindings = load_config()
 registered_hotkeys = []
 
 DOFUS_FOCUSED = False
+element_coordinates = {}
 
 
-def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=SELL_SEARCH_AREA):
-    # Locate the template image within a larger image.
-    # Args:
-    # template_path (str): Path to the template image.
-    # image (np.ndarray): The image in which to search.
-    # threshold (float): The threshold for template matching.
-    # global_search_area (tuple): The search area as a fraction of the image dimensions.
-    #
-    # Returns:
-    # tuple: The top-left corner and size of the detected template, or (None, None) if not found.
+def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=ALL_SCREEN_SEARCH_AREA):
     if not os.path.exists(template_path):
         debug_print(f"Template image not found: {template_path}")
         return None, None
@@ -71,40 +61,31 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
 
 
 def take_screenshot():
-    # Takes a screenshot of the current screen.
-    #
-    # Returns:
-    # np.ndarray: The screenshot image.
     screenshot = pyautogui.screenshot()
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
 
-def extract_table(roi):
-    # Extracts a table of numbers from a region of interest (ROI) in an image.
-    #
-    # Args:
-    # roi (np.ndarray): The region of interest image.
-    #
-    # Returns:
-    # dict: A dictionary mapping quantities to prices.
+def extract_text(roi):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
     if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}gray.png', gray)
 
-    # Adjust the threshold value slightly to improve precision
     adjusted_threshold = 140
     _, thresh = cv2.threshold(gray, adjusted_threshold, WHITE, cv2.THRESH_BINARY_INV)
 
     if get_value(DEBUG_MODE_TOGGLE_KEY):
         cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}thresholded.png', thresh)
 
-    extracted_text = pytesseract.image_to_string(thresh, config=CUSTOM_TESSERACT_CONFIG)
+    return pytesseract.image_to_string(thresh, config=CUSTOM_TESSERACT_CONFIG)
+
+
+def extract_table(roi):
+    extracted_text = extract_text(roi)
 
     rows = extracted_text.split('\n')
     data_map = {}
 
-    debug_print("\nExtracted text:")
     for row in rows:
         debug_print(row)
 
@@ -119,17 +100,10 @@ def extract_table(roi):
 
 
 def detect_prices(screenshot):
-    # Detects the price table in the screenshot.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
-    #
-    # Returns:
-    # dict: A dictionary mapping quantities to prices.
     price_table_header_cue_path = f'{RES_PATH}price_table_cue.png'
     price_table_header_cue_dim = cv2.imread(price_table_header_cue_path, 0).shape
 
-    price_loc, _ = locate_element(price_table_header_cue_path, screenshot, global_search_area=PRICES_SEARCH_AREA)
+    price_loc, _ = get_element_coordinates('price_table', price_table_header_cue_path, screenshot)
     if price_loc is None:
         debug_print("Price table not found.")
         return None
@@ -154,10 +128,10 @@ def detect_prices(screenshot):
 
         if max_height == 0:
             if rows_detected == 1:
-                debug_print("y_bot_l: " + str(y_bot_l))
-                debug_print("y_top_r: " + str(y_top_r))
+                # debug_print("y_bot_l: " + str(y_bot_l))
+                # debug_print("y_top_r: " + str(y_top_r))
                 max_height = (y_bot_l - y_top_r) * 5 + y_top_r
-                debug_print("max_height: " + str(max_height))
+                # debug_print("max_height: " + str(max_height))
 
         if max_height != 0 and y_bot_l > max_height:
             break
@@ -183,45 +157,68 @@ def detect_prices(screenshot):
 
 
 def detect_quantity(screenshot):
-    # Detects the quantity selected in the screenshot.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
-    #
-    # Returns:
-    # int: The detected quantity, or None if not found.
+    quantity_title_cue_path = f'{RES_PATH}quantity_title_cue.png'
 
-    for quantity, cue_path in QUANTITY_CUES.items():
-        loc, _ = locate_element(cue_path, screenshot, 0.98, global_search_area=INPUTS_SEARCH_AREA)
-        if loc is not None:
-            debug_print(f"Quantity {quantity} detected.")
-            return quantity
+    def position_offset(x, y, w, h):
+        roi_x = x + w  # Right edge of the title box
+        roi_y = y
+        return roi_x, roi_y, w, h
 
-    for quantity, cue_path in ALT_QUANTITY_CUES.items():
-        loc, _ = locate_element(cue_path, screenshot, 0.98, INPUTS_SEARCH_AREA)
-        if loc is not None:
-            debug_print(f"Quantity {quantity} detected.")
-            return quantity
+    # Locate the quantity number by applying the offset to the title's position
+    quantity_loc, size = get_element_coordinates(
+        'quantity_title',
+        quantity_title_cue_path,
+        screenshot,
+        offset_function=lambda x, y, w, h: position_offset(x, y, w, h),
+    )
 
-    debug_print("\nQuantity not detected.")
+    if quantity_loc is None:
+        debug_print("Quantity title not found, thus quantity number not detected.")
+        return None
+
+    # Use the cached position of the quantity number directly
+    roi_x, roi_y = quantity_loc
+    roi_w, roi_h = size[0], size[1]
+
+    # Define the region of interest (ROI) for the quantity number
+    roi = screenshot[roi_y:roi_y + roi_h, roi_x:roi_x + roi_w]
+
+    if get_value(DEBUG_MODE_TOGGLE_KEY):
+        cv2.imwrite(f'{RES_PATH}{DEBUG_PATH}quantity_roi.png', roi)
+
+    # Extract the text from the ROI
+    extracted_text = extract_text(roi).strip()
+
+    # Check if the extracted text is a valid quantity
+    if extracted_text in {QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED}:
+        quantity = int(extracted_text)
+        debug_print(f"Quantity {quantity} detected.")
+        return quantity
+
+    debug_print("Quantity not detected.")
     return None
 
 
-previous_price_input_loc = None
+def get_element_coordinates(key, cue_path, screenshot, threshold=LOCATE_ELEMENT_THRESHOLD,
+                            search_area=ALL_SCREEN_SEARCH_AREA, offset_function=None):
+    if key in element_coordinates:
+        debug_print(f"Using cached coordinates for {key}.")
+        elem = element_coordinates[key]
+        return (elem.x, elem.y), elem.size
+
+    loc, size = locate_element(cue_path, screenshot, threshold, search_area)
+    if loc is not None:
+        x, y = loc
+        if offset_function:
+            x, y, w, h = offset_function(x, y, size[0], size[1])
+            loc = (x, y)
+            size = (w, h)
+        element_coordinates[key] = Coordinates(x, y, size[0], size[1])
+        debug_print(f"Coordinates for {key} found: {element_coordinates[key]}")
+    return loc, size
 
 
 def sell_item(screenshot, current_price, quick_sell=False):
-    # Automates the process of selling an item.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
-    # current_price (int): The price to list the item at.
-    # quick_sell (bool): Whether to skip the price input field and list the item at the current price.
-
-    global previous_price_input_loc
-
-    screen_width, screen_height = screenshot.shape[1], screenshot.shape[0]
-
     if quick_sell:
         debug_print("Quick sell for price : " + str(current_price))
         pyautogui.press('enter')
@@ -230,38 +227,12 @@ def sell_item(screenshot, current_price, quick_sell=False):
 
     price_input_cue_path = f'{RES_PATH}price_input_cue.png'
 
-    # Attempt to locate the price input field
-    price_input_loc, size = None, None
-    if previous_price_input_loc:
-        debug_print(f"Using previous price input location: {previous_price_input_loc}")
+    # Search for the price input location once and store it
+    price_input_loc, size = get_element_coordinates('price_input', price_input_cue_path, screenshot)
 
-        # Convert the previous coordinates to fractions of the screen size
-        search_area_coords = (
-            previous_price_input_loc.x - 10,
-            previous_price_input_loc.y - 10,
-            previous_price_input_loc.x + previous_price_input_loc.w + 10,
-            previous_price_input_loc.y + previous_price_input_loc.h + 10
-        )
-        search_area = to_search_area(search_area_coords, (screen_width, screen_height))
-
-        debug_print(f"Calculated search area based on previous location: {search_area}")
-
-        price_input_loc, size = locate_element(price_input_cue_path, screenshot, global_search_area=search_area)
-
-    # If not found in the reduced search area, try to locate it in the base one
     if price_input_loc is None:
-        debug_print("Price input not found in previous location area. Searching in the full area.")
-
-        price_input_loc, size = locate_element(price_input_cue_path, screenshot, global_search_area=INPUTS_SEARCH_AREA)
-
-        if price_input_loc is None:
-            debug_print("Price input field not found in the full search area.")
-            return
-
-    # Update previous_price_input_loc with the found location
-    previous_price_input_loc = PreviousLocation(price_input_loc[0], price_input_loc[1], size[0], size[1])
-
-    debug_print(f"Updated previous price input location to: {previous_price_input_loc}")
+        debug_print("Price input field not found.")
+        return
 
     if current_price is None or current_price <= 0:
         debug_print("Invalid price detected. Operation aborted.")
@@ -286,7 +257,7 @@ def sell_item(screenshot, current_price, quick_sell=False):
 def click_sell(screenshot, price='0'):
     was_alt = False
     sell_button_cue_path = f'{RES_PATH}sell_button_cue.png'
-    sell_button_loc, size = locate_element(sell_button_cue_path, screenshot, global_search_area=INPUTS_SEARCH_AREA)
+    sell_button_loc, size = get_element_coordinates('sell_button', sell_button_cue_path, screenshot)
     if sell_button_loc is None:
         debug_print("Sell button not found.")
 
@@ -298,7 +269,7 @@ def click_sell(screenshot, price='0'):
 
         while sell_button_loc is None:
             oui_button_cue_path = f'{RES_PATH}oui_button_cue.png'
-            sell_button_loc, size = locate_element(oui_button_cue_path, oui_screenshot, 0.9, OUI_BUTTON_SEARCH_AREA)
+            sell_button_loc, size = locate_element(oui_button_cue_path, oui_screenshot, 0.9)
             if sell_button_loc is None:
                 tries += 1
             if tries > 5:
@@ -319,14 +290,6 @@ def click_sell(screenshot, price='0'):
 
 
 def find_current_price(screenshot, quantity):
-    # Finds the current price of the item for the given quantity.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
-    # quantity (int): The quantity of the item.
-    #
-    # Returns:
-    # int: The current price of the item, or None if not found.
     if quantity is None:
         debug_print("Invalid quantity detected.")
         return None
@@ -345,21 +308,14 @@ def find_current_price(screenshot, quantity):
 
 
 def handle_sell():
-    # Handles the sell process when the hotkey is pressed.
     execute_sell_process(single_sell_process, SellProcessType.SINGLE)
 
 
 def handle_sell_all():
-    # Handles the sell process when the hotkey is pressed.
     execute_sell_process(sell_all_process, SellProcessType.ALL)
 
 
 def execute_sell_process(process_function, process_type):
-    # Executes the sell process.
-    #
-    # Args:
-    # process_function (function): The function to execute the unique part of the sell process.
-    # process_type (ProcessType): The type of sell process.
     refresh_focus_status()
     if not DOFUS_FOCUSED:
         debug_print(f"Dofus window is not focused. Aborting {process_type.value} sell action.")
@@ -381,10 +337,6 @@ def execute_sell_process(process_function, process_type):
 
 
 def single_sell_process(screenshot):
-    # Executes the unique part of the single sell process.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
     quantity = detect_quantity(screenshot)
     if quantity is not None:
         current_price = find_current_price(screenshot, quantity)
@@ -396,10 +348,6 @@ def single_sell_process(screenshot):
 
 
 def sell_all_process(screenshot):
-    # Executes the unique part of the sell all process.
-    #
-    # Args:
-    # screenshot (np.ndarray): The screenshot image.
     quantity = detect_quantity(screenshot)
     if quantity is None:
         debug_print("Operation aborted.")
@@ -448,25 +396,14 @@ def is_game_window_open_and_focused():
 
 
 def update_keybinds(hotkeys_map, initial_setup=False):
-    # Updates the key bindings for various actions.
-    # Args:
-    # hotkeys_map (list of tuples): A list of tuples, each containing the action name,
-    # the keybinding, and the function to be executed.
-
-    # Unhook only the hotkeys that are in the hotkeys_map
     if not initial_setup:
         for action, key, function in hotkeys_map:
             current_key = get_value(action)
             if current_key:
-                # Remove the old hotkey binding if it exists
                 keyboard.remove_hotkey(current_key)
 
-    # Update or add new keybindings
     for action, key, function in hotkeys_map:
-        # Register the hotkey
         keyboard.add_hotkey(key, function)
-
-        # Save the configuration for each updated key
         save_config_key(action, key)
 
     debug_print(f"Updated keybinds: {[(action, key) for action, key, _ in hotkeys_map]}")

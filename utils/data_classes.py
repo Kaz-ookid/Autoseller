@@ -12,14 +12,13 @@ class SellProcessType(Enum):
     ALL = "all"
 
 
-class PreviousLocation:
+class Coordinates:
     def __init__(self, x, y, w, h):
         self.x = x
         self.y = y
-        self.w = w
-        self.h = h
+        self.size = (w, h)
 
     def __str__(self):
-        return f"PreviousLocation(x={self.x}, y={self.y}, w={self.w}, h={self.h})"
+        return f"PreviousLocation(x={self.x}, y={self.y}, size={self.size})"
 
 

@@ -1,3 +1,4 @@
 res/debug/*
 config.json
 *.xml
+.idea/*.xml
