@@ -41,9 +41,9 @@ cd Autoseller
 
  ### Install Python Dependencies
 Within the AutoSell directory, run:
-    ```bash
-    pip install -r requirements.txt
-    ```
+``` bash
+pip install -r requirements.txt
+```
 
  ## Configuration
 
@@ -79,7 +79,7 @@ a debug folder is provided, where screenshots will be saved if you enable debug 
 
  ### Running the Script
  1. Run the script:
-    ```bash
+    ```
     python DofusAutoSeller.py
     ```
     
