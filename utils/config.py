@@ -17,11 +17,10 @@ def load_config():
     # Returns:
     # dict: The loaded and possibly updated configuration.
     config = {}
-    if os.path.exists(CONFIG_PATH) :
+    if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, 'r') as config_file:
             config = json.load(config_file)
             if check_config_integrity(config):
-                debug_print("Config loaded.")
                 return config
 
     load_and_save_default_config()

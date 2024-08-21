@@ -6,22 +6,28 @@ import cv2
 import keyboard
 import numpy as np
 import pyautogui
-import pygetwindow as gw
 from pytesseract import pytesseract
 
 from utils.config import save_config_key, get_value, load_config
 from utils.constants import WHITE, RES_PATH, DEBUG_PATH, \
     LOCATE_ELEMENT_THRESHOLD, QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED, WHITE_PIXEL_THRESHOLD, \
     CUSTOM_TESSERACT_CONFIG, DEBUG_MODE_TOGGLE_KEY, SELL_JSON_KEY, \
-    SELL_ALL_JSON_KEY, ALL_SCREEN_SEARCH_AREA
+    SELL_ALL_JSON_KEY, ALL_SCREEN_SEARCH_AREA, LOCATE_TITLE_THRESHOLD, DEBUG_SCREEN_WITH_TEMPLATE_PATH, \
+    DEBUG_FOUND_ELEMENTS_PATH
 from utils.data_classes import SellProcessType, Coordinates
 from utils.debug_utils import debug_print
+from utils.helpers import get_game_window_size, is_game_window_open_and_focused
 
 current_keybindings = load_config()
 registered_hotkeys = []
 
-DOFUS_FOCUSED = False
 element_coordinates = {}
+
+
+def reset_element_coordinates():
+    global element_coordinates
+    element_coordinates = {}
+    debug_print("Element coordinates have been reset.")
 
 
 def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, global_search_area=ALL_SCREEN_SEARCH_AREA):
@@ -29,35 +35,92 @@ def locate_element(template_path, image, threshold=LOCATE_ELEMENT_THRESHOLD, glo
         debug_print(f"Template image not found: {template_path}")
         return None, None
 
-    template = cv2.imread(template_path, 0)
+    template = cv2.imread(template_path)
     if template is None:
         debug_print(f"Failed to load template image: {template_path}")
         return None, None
 
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    height, width = image_gray.shape
+    template_original_height, template_original_width = template.shape[:2]
+
+    current_width, current_height = get_game_window_size()
+    if current_width is None or current_height is None:
+        return None, None
+
+    original_width = 2560
+    original_height = 1440
+
+    scale_factor = min(current_width / original_width, current_height / original_height)
+    max_scaling_attempts = 5  # Number of attempts to resize the template
+    scaling_increment = 1.05  # Increment scale by 5% each attempt
+
+    image_rgb = image  # Assuming the input 'image' is already in BGR format
+    height, width = image_rgb.shape[:2]
     left, top, right, bottom = int(width * global_search_area[0]), int(height * global_search_area[1]), int(
         width * (1 - global_search_area[2])), int(height * (1 - global_search_area[3]))
 
-    if get_value(DEBUG_MODE_TOGGLE_KEY):
-        timestamp = int(time.time())
-        cv2.imwrite(
-            f'{RES_PATH}{DEBUG_PATH}search_area_' + str(timestamp) + '_' + str(np.random.randint(0, 10000)) + '.png',
-            image[top:bottom, left:right])
+    search_area = image_rgb[top:bottom, left:right]
 
-    search_area = image_gray[top:bottom, left:right]
+    for attempt in range(max_scaling_attempts):
+        new_width = int(template_original_width * scale_factor)
+        new_height = int(template_original_height * scale_factor)
+        template_resized = cv2.resize(template, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
-    if search_area.shape[0] < template.shape[0] or search_area.shape[1] < template.shape[1]:
-        debug_print(
-            f"Template image is larger than the search area. Template size: {template.shape}, Search area size: {search_area.shape}")
-        return None, None
+        if get_value(DEBUG_MODE_TOGGLE_KEY):
+            debug_screenshot_with_template(search_area, template_resized)
 
-    result = cv2.matchTemplate(search_area, template, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, max_loc = cv2.minMaxLoc(result)
-    if max_val >= threshold:
-        return (max_loc[0] + left, max_loc[1] + top), template.shape[::-1]
-    else:
-        return None, None
+        if search_area.shape[0] < template_resized.shape[0] or search_area.shape[1] < template_resized.shape[1]:
+            debug_print(
+                f"Template image is larger than the search area. Template size: {template_resized.shape}, Search area size: {search_area.shape}")
+            return None, None
+
+        # Perform template matching
+        result = cv2.matchTemplate(search_area, template_resized, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+        if max_val >= threshold:
+            found_x, found_y = max_loc[0] + left, max_loc[1] + top
+            element_width, element_height = template_resized.shape[1], template_resized.shape[0]
+
+            if get_value(DEBUG_MODE_TOGGLE_KEY):
+                save_found_element(image, found_x, found_y, element_width, element_height)
+
+            return (found_x, found_y), (element_width, element_height)
+
+        # Increase the scale factor for the next attempt
+        scale_factor *= scaling_increment
+
+    debug_print("Element not found after all scaling attempts.")
+    return None, None
+
+
+def save_found_element(image, x, y, width, height):
+    """Save the found element as an image for debugging purposes."""
+    found_element = image[y:y+height, x:x+width]
+    debug_path = f'{RES_PATH}{DEBUG_PATH}{DEBUG_FOUND_ELEMENTS_PATH}'
+    os.makedirs(debug_path, exist_ok=True)
+    debug_file_path = os.path.join(debug_path, f'found_element_{int(time.time())}.png')
+    cv2.imwrite(debug_file_path, found_element)
+
+
+def debug_screenshot_with_template(screen_image, template_image):
+    """Save a screenshot with the template pasted in the middle for debugging."""
+    screen_height, screen_width = screen_image.shape[:2]
+    template_height, template_width = template_image.shape[:2]
+
+    # Determine the center position to paste the template
+    center_x = (screen_width - template_width) // 2
+    center_y = (screen_height - template_height) // 2
+
+    # Paste the template onto the screen image
+    screen_image_with_template = screen_image.copy()
+    screen_image_with_template[center_y:center_y + template_height, center_x:center_x + template_width] = template_image
+
+    # Save the debug image
+    debug_path = f'{RES_PATH}{DEBUG_PATH}{DEBUG_SCREEN_WITH_TEMPLATE_PATH}'
+    os.makedirs(debug_path, exist_ok=True)
+    debug_file_path = os.path.join(debug_path, f'debug_screenshot_with_template_{int(time.time())}.png')
+    cv2.imwrite(debug_file_path, screen_image_with_template)
+
 
 
 def take_screenshot():
@@ -101,15 +164,14 @@ def extract_table(roi):
 
 def detect_prices(screenshot):
     price_table_header_cue_path = f'{RES_PATH}price_table_cue.png'
-    price_table_header_cue_dim = cv2.imread(price_table_header_cue_path, 0).shape
 
-    price_loc, _ = get_element_coordinates('price_table', price_table_header_cue_path, screenshot)
+    price_loc, elem_size = get_element_coordinates('price_table', price_table_header_cue_path, screenshot)
     if price_loc is None:
         debug_print("Price table not found.")
         return None
 
-    x_top_r, y_top_r = price_loc[0] + price_table_header_cue_dim[1], price_loc[1] + price_table_header_cue_dim[0]
-    x_bot_l, y_bot_l = price_loc[0], price_loc[1] + price_table_header_cue_dim[0]
+    x_top_r, y_top_r = price_loc[0] + elem_size[0], price_loc[1] + elem_size[1]
+    x_bot_l, y_bot_l = price_loc[0], price_loc[1] + elem_size[1]
 
     height, width, _ = screenshot.shape
 
@@ -160,9 +222,7 @@ def detect_quantity(screenshot):
     quantity_title_cue_path = f'{RES_PATH}quantity_title_cue.png'
 
     def position_offset(x, y, w, h):
-        roi_x = x + w  # Right edge of the title box
-        roi_y = y
-        return roi_x, roi_y, w, h
+        return x, y, 2*w, h
 
     # Locate the quantity number by applying the offset to the title's position
     quantity_loc, size = get_element_coordinates(
@@ -189,8 +249,10 @@ def detect_quantity(screenshot):
     # Extract the text from the ROI
     extracted_text = extract_text(roi).strip()
 
+    number_str = re.findall(r'\d+', extracted_text).pop() if extracted_text else None
+
     # Check if the extracted text is a valid quantity
-    if extracted_text in {QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED}:
+    if number_str in {QUANTITY_ONE, QUANTITY_TEN, QUANTITY_HUNDRED}:
         quantity = int(extracted_text)
         debug_print(f"Quantity {quantity} detected.")
         return quantity
@@ -316,8 +378,7 @@ def handle_sell_all():
 
 
 def execute_sell_process(process_function, process_type):
-    refresh_focus_status()
-    if not DOFUS_FOCUSED:
+    if not is_game_window_open_and_focused():
         debug_print(f"Dofus window is not focused. Aborting {process_type.value} sell action.")
         return
 
@@ -379,20 +440,6 @@ def sell_all_process(screenshot):
             quantity_has_changed = True
         else:
             quantity_has_changed = False
-
-
-def refresh_focus_status():
-    global DOFUS_FOCUSED
-    DOFUS_FOCUSED = is_game_window_open_and_focused()
-
-
-def is_game_window_open_and_focused():
-    game_windows = [w for w in gw.getWindowsWithTitle('- Dofus') if w.visible]
-    focused_window = gw.getActiveWindow()
-    if focused_window and any(focused_window.title == w.title for w in game_windows):
-        debug_print(f"Game window {focused_window.title} is focused.")
-        return True
-    return False
 
 
 def update_keybinds(hotkeys_map, initial_setup=False):

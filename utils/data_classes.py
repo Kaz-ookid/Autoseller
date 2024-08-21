@@ -19,6 +19,6 @@ class Coordinates:
         self.size = (w, h)
 
     def __str__(self):
-        return f"PreviousLocation(x={self.x}, y={self.y}, size={self.size})"
+        return f"Coordinates(x={self.x}, y={self.y}, size={self.size})"
 
 

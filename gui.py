@@ -1,7 +1,7 @@
 import tkinter as tk
 import uuid
 
-from logic import update_keybinds, KEYBINDS_FUNCTIONS
+from logic import update_keybinds, KEYBINDS_FUNCTIONS, reset_element_coordinates
 from utils.config import save_config_key, load_config, get_value
 from utils.constants import DEBUG_MODE_TOGGLE_KEY
 from utils.data_classes import MessageType
@@ -54,11 +54,15 @@ def start_gui():
         set_debug_mode(debug_var.get())
         save_config_key(DEBUG_MODE_TOGGLE_KEY, debug_var.get())
 
+    def reset_coordinates():
+        reset_element_coordinates()
+        send_info_message("Element coordinates reset.", MessageType.SUCCESS)
+
     config = load_config()
 
     root = tk.Tk()
     root.title("Dofus AutoSeller")
-    root.geometry("300x200")
+    root.geometry("300x250")  # Adjusted height to accommodate the new button
     root.protocol("WM_DELETE_WINDOW", on_exit)
 
     icon_path = r'res/logo/DAS_icon.ico'
@@ -82,6 +86,9 @@ def start_gui():
 
     info_message = tk.Label(root, fg="green", text="")
     info_message.pack(anchor="w")
+
+    # Add the new Reset button
+    tk.Button(root, text="Reset Coordinates", command=reset_coordinates).pack(anchor="w", pady=10)
 
     # Call wrapper to set initial keybindings
     update_keybinds_wrapper(initial_setup=True)
