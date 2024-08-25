@@ -329,7 +329,7 @@ def click_sell(screenshot, price='0'):
 
     def alt_position_offset(x, y, w, h):
         global sell_button_area
-        sell_button_area = Coordinates(x - w - 50, y - 50, w * 2 + 100, h + 100)
+        sell_button_area = Coordinates(x - w - 50, y - 50, w * 4 + 100, h + 100)
         return x + w // 2, y + h // 2, w, h
 
     def oui_button_offset(x, y, w, h):
@@ -363,7 +363,7 @@ def click_sell(screenshot, price='0'):
 
     check_alt_button = locate_element(f'{RES_PATH}sell_button_cue_alt.png'
                                       , reduced_screenshot
-                                      , LOCATE_TITLE_THRESHOLD)[0]
+                                      , threshold=0.5)[0]
 
     if check_alt_button is not None:
         global oui_button_area
@@ -399,7 +399,6 @@ def click_sell(screenshot, price='0'):
             while oui_button_check_loc is None:
                 if tries > 3:
                     break
-                time.sleep(0.25)
                 tries += 1
                 oui_button_reduced_screenshot = take_screenshot()[
                                                 oui_button_area.y:oui_button_area.y + oui_button_area.size[1]
